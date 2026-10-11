@@ -1,0 +1,79 @@
+# Data quality - "the API answered, but can we trust what it said?"
+# Fast, specific signals that complement the (slower) correctness SLOs.
+
+groups:
+  - name: data-quality
+    rules:
+
+      # A contract check failed on the latest probes (gjson validations in the
+      # collector's http_check receiver). The correctness SLO tracks the budget;
+      # this tells you within minutes that something changed.
+      - alert: ProviderContractBroken
+        expr: max by (provider) (last_over_time(httpcheck_validation_failed[5m])) > 0
+        for: 10m
+        labels:
+          severity: ticket
+          category: data-quality
+        annotations:
+          summary: '{{ $labels.provider }}: response no longer matches the data contract'
+          description: A gjson validation of the synthetic probe has been failing for 10 min. Look at the raw response and at the validations in otel-collector/config.yaml.
+          runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#contract-broken
+          dashboard_url: http://127.0.0.1:3030/d/myc-slo
+
+      # Totals usually grow. A drop of more than 1 % within an hour is a
+      # re-index, a mass deletion or a changed query - not mushrooms vanishing.
+      - alert: ObservationCountDropped
+        expr: |
+          -delta(inat_observations[1h]) / inat_observations > 0.01
+        for: 5m
+        labels:
+          severity: ticket
+          category: data-quality
+        annotations:
+          summary: 'iNaturalist count for {{ $labels.scope }} {{ $labels.species }} dropped by {{ $value | humanizePercentage }} in 1 h'
+          description: Observation totals should only grow. Check whether the upstream index was rebuilt; delta-based panels will show a dip.
+          runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#count-dropped
+
+      # The real consumer (json-exporter scrapes) fails although the synthetic
+      # probe works: throttling of our User-Agent, a changed JSONPath, a timeout
+      # on bigger responses... The last clause requires failures within the
+      # last 30 min: without it the 1 h window kept the alert firing for an hour
+      # after the fix (game day finding).
+      - alert: ConsumerScrapesFailing
+        expr: |
+          (
+            1 - sum by (provider) (sum_over_time(up{provider!=""}[1h]))
+              / sum by (provider) (count_over_time(up{provider!=""}[1h]))
+          ) > 0.2
+          unless on (provider)
+          (max by (provider) (max_over_time(httpcheck_success[1h])) == 0)
+          and on (provider)
+          (min by (provider) (min_over_time(up{provider!=""}[30m])) == 0)
+        for: 15m
+        labels:
+          severity: ticket
+          category: data-quality
+        annotations:
+          summary: '{{ $labels.provider }}: {{ $value | humanizePercentage }} of data scrapes failed in the last hour'
+          description: json-exporter cannot fetch or parse the provider's data while synthetic probes succeed. Check `docker compose logs json-exporter`.
+          runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#consumer-scrapes-failing
+
+      - alert: UpstreamRateLimited
+        expr: max by (provider) (last_over_time(httpcheck_status{http_status_code="429"}[10m])) == 1
+        labels:
+          severity: ticket
+          category: data-quality
+        annotations:
+          summary: '{{ $labels.provider }} answers HTTP 429 Too Many Requests'
+          description: We are over the provider's rate limit. Increase scrape intervals in otel-collector/config.yaml.
+          runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#rate-limited
+
+      - alert: UpstreamCertificateExpiresSoon
+        expr: min by (provider) (last_over_time(httpcheck_tls_cert_remaining_seconds[10m])) < 14 * 86400
+        for: 1h
+        labels:
+          severity: ticket
+          category: data-quality
+        annotations:
+          summary: '{{ $labels.provider }} TLS certificate expires in {{ $value | humanizeDuration }}'
+          description: Not ours to fix, but an expired upstream certificate would break every fetch.

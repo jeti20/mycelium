@@ -1,0 +1,15 @@
+# Keeps pinned image tags and GitHub Actions up to date via pull requests.
+version: 2
+updates:
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      observability-stack:
+        patterns: ["grafana/*", "prom/*", "prometheuscommunity/*", "otel/*", "axllent/*", "ghcr.io/*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

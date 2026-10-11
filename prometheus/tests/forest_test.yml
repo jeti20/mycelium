@@ -1,0 +1,167 @@
+# Unit tests for the domain rules (rules/forest.yml).
+#   docker compose run --rm promtool test rules tests/forest_test.yml
+
+rule_files:
+  - ../rules/forest.yml
+
+evaluation_interval: 1m
+
+tests:
+
+  # ---------------------------------------------------------------------------
+  # Season index: +10 observations per hour in Poland = 240/day = 60 % of the
+  # 400/day peak-season baseline.
+  # ---------------------------------------------------------------------------
+  - name: season index from a steady stream of observations
+    interval: 1h
+    input_series:
+      - series: 'inat_observations{provider="inaturalist", scope="fungi-pl", instance="fungi-pl", job="inaturalist-aggregates"}'
+        values: '1000+10x30'
+    promql_expr_test:
+      - expr: forest:inat_new_observations:24h{scope="fungi-pl"}
+        eval_time: 30h
+        exp_samples:
+          - labels: 'forest:inat_new_observations:24h{provider="inaturalist", scope="fungi-pl", instance="fungi-pl", job="inaturalist-aggregates"}'
+            value: 240
+      - expr: forest:season_index:ratio
+        eval_time: 30h
+        exp_samples:
+          - labels: 'forest:season_index:ratio'
+            value: 0.6
+
+  # ---------------------------------------------------------------------------
+  # Why delta() and not increase(): one observation gets deleted (1100 -> 1099).
+  # Prometheus sees that as a COUNTER RESET - increase() would add the whole
+  # total again. The gauge-aware rule stays sane.
+  # ---------------------------------------------------------------------------
+  - name: a deleted observation is not a counter reset
+    interval: 1h
+    input_series:
+      - series: 'inat_observations{scope="species", species="Boletus edulis"}'
+        values: '1000+10x10 1099 1109+10x19'
+    promql_expr_test:
+      - expr: resets(inat_observations[24h])
+        eval_time: 30h
+        exp_samples:
+          - labels: '{scope="species", species="Boletus edulis"}'
+            value: 1
+      # increase() reads the 1-observation drop as a reset: ~1376 "new" observations
+      - expr: round(increase(inat_observations[24h]))
+        eval_time: 30h
+        exp_samples:
+          - labels: '{scope="species", species="Boletus edulis"}'
+            value: 1376
+      # delta(): 219 real new observations in the 23 h of samples, scaled to 24 h
+      - expr: round(forest:inat_new_observations:24h)
+        eval_time: 30h
+        exp_samples:
+          - labels: '{scope="species", species="Boletus edulis"}'
+            value: 229
+
+  # ---------------------------------------------------------------------------
+  # Label churn: a catalog edit (here: a new name_en label) starts a new series
+  # while the old one is still inside the 24 h window. Per-edibility totals
+  # must count the species once, not twice.
+  # ---------------------------------------------------------------------------
+  - name: a renamed label does not double-count a species
+    interval: 1h
+    input_series:
+      - series: 'inat_observations{scope="species", species="Boletus edulis", edibility="edible"}'
+        values: '1000+10x10'
+      - series: 'inat_observations{scope="species", species="Boletus edulis", edibility="edible", name_en="King Bolete"}'
+        values: '_x10 1110+10x10'
+    promql_expr_test:
+      - expr: count(forest:inat_new_observations:24h{species="Boletus edulis"})
+        eval_time: 15h
+        exp_samples:
+          - labels: '{}'
+            value: 2
+      - expr: count(forest:inat_new_observations_by_edibility:24h)
+        eval_time: 15h
+        exp_samples:
+          - labels: '{}'
+            value: 1
+      # the larger of the two (old series, delta extrapolated to the window), not old + new (~150)
+      - expr: round(forest:inat_new_observations_by_edibility:24h)
+        eval_time: 15h
+        exp_samples:
+          - labels: '{edibility="edible"}'
+            value: 110
+
+  # ---------------------------------------------------------------------------
+  # Coordinates are split out of iNaturalist's "lat,lon" string for Geomap.
+  # ---------------------------------------------------------------------------
+  - name: latest observation gets lat and lon labels
+    interval: 4m
+    input_series:
+      - series: 'inat_latest_observation_info{scope="species", species="Boletus edulis", location="51.0454559732,20.7969671568", place_guess="Masovian, PL", instance="boletus-edulis", job="inaturalist"}'
+        values: '407474427x10'
+    promql_expr_test:
+      - expr: forest:inat_latest_observation:geo
+        eval_time: 10m
+        exp_samples:
+          - labels: 'forest:inat_latest_observation:geo{scope="species", species="Boletus edulis", location="51.0454559732,20.7969671568", place_guess="Masovian, PL", lat="51.0454559732", lon="20.7969671568"}'
+            value: 407474427
+
+  # ---------------------------------------------------------------------------
+  # Deathcap notice: two new Amanita phalloides reports.
+  # ---------------------------------------------------------------------------
+  - name: deathcap reports notify the mushroom pickers
+    interval: 4m
+    input_series:
+      - series: 'inat_observations{scope="species", species="Amanita phalloides", name_pl="muchomor zielonawy", edibility="deadly"}'
+        values: '370x15 372x20'
+      - series: 'inat_observations{scope="species", species="Boletus edulis", name_pl="borowik szlachetny", edibility="edible"}'
+        values: '1700+1x35'
+    alert_rule_test:
+      - alertname: DeathcapReported
+        eval_time: 55m
+        exp_alerts: []
+      - alertname: DeathcapReported
+        eval_time: 2h
+        exp_alerts:
+          - exp_labels:
+              severity: none
+              category: forest
+              scope: species
+              species: Amanita phalloides
+              name_pl: muchomor zielonawy
+              edibility: deadly
+            exp_annotations:
+              summary: 'Deathcap (muchomor zielonawy) reported in Poland: 2 new observation(s) in 24 h'
+              description: >-
+                Amanita phalloides causes most fatal mushroom poisonings in Europe. It is often
+                mistaken for green russulas or young parasols. Never eat a mushroom you have not
+                identified with certainty. Poison information: 112.
+              dashboard_url: http://127.0.0.1:3030/d/myc-forest
+
+  # ---------------------------------------------------------------------------
+  # Public-health signal: page views of "Grzyby trujące" 3x the 14-day mean.
+  # ---------------------------------------------------------------------------
+  - name: poisoning interest spike
+    interval: 15m
+    input_series:
+      - series: 'wiki_pageviews_latest{wiki_article="Grzyby_truj%C4%85ce", species="-", provider="wikimedia"}'
+        values: '300x20'
+      - series: 'wiki_pageviews_daily{wiki_article="Grzyby_truj%C4%85ce", species="-", provider="wikimedia", day="1970010100"}'
+        values: '1400x20'
+    promql_expr_test:
+      - expr: forest:wiki_interest:spike_ratio
+        eval_time: 1h
+        exp_samples:
+          - labels: 'forest:wiki_interest:spike_ratio{wiki_article="Grzyby_truj%C4%85ce", species="-", provider="wikimedia"}'
+            value: 3
+    alert_rule_test:
+      - alertname: PoisoningInterestSpike
+        eval_time: 4h
+        exp_alerts:
+          - exp_labels:
+              severity: none
+              category: forest
+              wiki_article: Grzyby_truj%C4%85ce
+              species: '-'
+              provider: wikimedia
+            exp_annotations:
+              summary: Interest in poisonous mushrooms is 3.0x the 14-day average
+              description: Page views of "Grzyby trujące" (poisonous mushrooms) on Polish Wikipedia spiked. This usually follows news about poisonings.
+              dashboard_url: http://127.0.0.1:3030/d/myc-interest

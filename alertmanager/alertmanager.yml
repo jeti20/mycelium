@@ -1,0 +1,150 @@
+# Alertmanager - the single router for every alert in the stack.
+#
+# Everything is delivered by e-mail to Mailpit (a local SMTP catcher with a web
+# inbox at http://127.0.0.1:8025), so the whole alerting path - rule, routing,
+# grouping, inhibition, templating, SMTP - is real and visible without any
+# external account. Swap the smarthost for a real SMTP server and it is production mail.
+#
+#   severity=page    -> #oncall      immediately, 24/7, repeats every hour
+#   severity=ticket  -> #tickets     only Mon-Fri 08:00-18:00 Europe/Warsaw
+#   category=forest  -> #grzybiarze  mushroom-season notices, muted at night
+#   Watchdog         -> #heartbeat   every 5 min; Prometheus checks it arrives (dead man's switch)
+
+global:
+  resolve_timeout: 5m
+  smtp_smarthost: mailpit:1025
+  smtp_from: Mycelium Alerts <alerts@mycelium.local>
+  smtp_require_tls: false
+  smtp_hello: alertmanager.mycelium.local
+
+templates:
+  - /etc/alertmanager/templates/*.tmpl
+
+# Every notification becomes a trace: alertmanager -> SMTP -> mailpit.
+tracing:
+  client_type: grpc
+  endpoint: otel-collector:4317
+  insecure: true
+  sampling_fraction: 1.0
+
+route:
+  receiver: tickets
+  group_by: [alertname, provider, sloth_service, sloth_slo]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 12h
+  routes:
+
+    - matchers: [alertname="Watchdog"]
+      receiver: heartbeat
+      group_wait: 5s
+      group_interval: 1m
+      repeat_interval: 5m
+
+    - matchers: [severity="page"]
+      receiver: oncall
+      group_wait: 10s
+      repeat_interval: 1h
+
+    - matchers: [category="forest"]
+      receiver: grzybiarze
+      group_by: [alertname, species]
+      repeat_interval: 24h
+      mute_time_intervals: [night]
+
+    - matchers: [severity="ticket"]
+      receiver: tickets
+      active_time_intervals: [working-hours]
+
+    - matchers: [severity="none"]
+      receiver: blackhole
+
+inhibit_rules:
+  # Fast burn already covers slow burn for the same SLO (Sloth tags its two
+  # alert tiers with sloth_severity, independent of our routing severity).
+  - source_matchers: [sloth_severity="page"]
+    target_matchers: [sloth_severity="ticket"]
+    equal: [sloth_id]
+
+  # Stale dashboards because iNaturalist itself is down: nothing to fix on our
+  # side, so the platform freshness SLO must not page for it.
+  - source_matchers: [alertname="ProviderUnreachable", provider="inaturalist"]
+    target_matchers: [sloth_id="mycelium-platform-dashboard-freshness"]
+
+  # A provider that is completely unreachable explains every symptom below it
+  # (burn rates, stale data, broken contracts). One root cause, one e-mail.
+  - source_matchers: [alertname="ProviderUnreachable"]
+    target_matchers: [severity=~"ticket|none"]
+    equal: [provider]
+
+  # Provider freshness is measured *through* our own json-exporter, so our
+  # outage looks like stale upstream data (found in a game day). While our
+  # collection path is down, upstream SLO alerts are noise.
+  - source_matchers: [alertname="PlatformComponentDown", job="json-exporter"]
+    target_matchers: [tier="upstream"]
+  - source_matchers: [alertname="PlatformComponentDown", job="json-exporter"]
+    target_matchers: [category="data-quality"]
+  - source_matchers: [alertname="TelemetryPipelineDown"]
+    target_matchers: [tier="upstream"]
+
+  # No collector, no forest data - don't report each missing signal separately.
+  - source_matchers: [alertname="TelemetryPipelineDown"]
+    target_matchers: [category=~"data-quality|forest"]
+
+time_intervals:
+  - name: working-hours
+    time_intervals:
+      - weekdays: ['monday:friday']
+        times:
+          - start_time: '08:00'
+            end_time: '18:00'
+        location: Europe/Warsaw
+
+  - name: night
+    time_intervals:
+      - times:
+          - start_time: '22:00'
+            end_time: '24:00'
+          - start_time: '00:00'
+            end_time: '07:00'
+        location: Europe/Warsaw
+
+receivers:
+  - name: oncall
+    email_configs:
+      - to: oncall@mycelium.local
+        send_resolved: true
+        headers:
+          Subject: '{{ template "mycelium.subject" . }}'
+          X-Priority: '1'
+        html: '{{ template "mycelium.html" . }}'
+        text: '{{ template "mycelium.text" . }}'
+
+  - name: tickets
+    email_configs:
+      - to: tickets@mycelium.local
+        send_resolved: true
+        headers:
+          Subject: '{{ template "mycelium.subject" . }}'
+        html: '{{ template "mycelium.html" . }}'
+        text: '{{ template "mycelium.text" . }}'
+
+  - name: grzybiarze
+    email_configs:
+      - to: grzybiarze@mycelium.local
+        send_resolved: false
+        headers:
+          Subject: '{{ template "mycelium.subject" . }}'
+        html: '{{ template "mycelium.html" . }}'
+        text: '{{ template "mycelium.text" . }}'
+
+  - name: heartbeat
+    email_configs:
+      - to: heartbeat@mycelium.local
+        send_resolved: false
+        headers:
+          Subject: '[heartbeat] alerting pipeline is alive'
+        text: 'Watchdog: Prometheus -> Alertmanager -> SMTP works. Sent {{ (index .Alerts 0).StartsAt.Format "2006-01-02 15:04 MST" }}.'
+        html: ''
+
+  - name: blackhole

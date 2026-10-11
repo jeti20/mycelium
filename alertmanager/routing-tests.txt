@@ -1,0 +1,13 @@
+# Routing tests - every line: <expected receiver> <alert labels...>
+# Run: docker compose run --rm amtool-routes   (amtool config routes test --verify.receivers)
+# Time intervals (working hours, night) are not evaluated by amtool; only the tree is.
+
+oncall      alertname=DashboardLatencyBudgetBurn severity=page category=slo sloth_severity=page
+oncall      alertname=TelemetryPipelineDown severity=page category=platform
+tickets     alertname=InaturalistAvailabilityBudgetBurn severity=ticket category=slo sloth_severity=page provider=inaturalist
+tickets     alertname=ProviderContractBroken severity=ticket category=data-quality provider=gbif
+tickets     alertname=PlatformComponentDown severity=ticket category=platform job=tempo
+blackhole   alertname=InaturalistAvailabilityBudgetBurn severity=none category=slo sloth_severity=ticket
+grzybiarze  alertname=DeathcapReported severity=none category=forest species=Amanita_phalloides
+grzybiarze  alertname=MushroomSeasonPeak severity=none category=forest
+heartbeat   alertname=Watchdog severity=none category=platform

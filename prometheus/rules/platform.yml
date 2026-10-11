@@ -1,0 +1,128 @@
+# Platform health - Mycelium watching itself.
+# Everything here is scraped directly by Prometheus (pull), independent of the
+# OpenTelemetry Collector it is partly about.
+
+groups:
+  - name: platform
+    rules:
+
+      # Dead man's switch. Always firing; Alertmanager mails it to the
+      # heartbeat mailbox every 5 min, and the next rule checks it arrives.
+      # pint disable alerts/comparison
+      - alert: Watchdog
+        expr: vector(1)
+        labels:
+          severity: none
+          category: platform
+        annotations:
+          summary: Alerting pipeline heartbeat (always firing)
+          description: If heartbeat e-mails stop, Prometheus -> Alertmanager -> SMTP is broken.
+
+      # Closes the loop: Mailpit counts accepted SMTP messages. No heartbeat
+      # e-mail for 20 min = the alert path is broken somewhere. It can't reliably
+      # mail itself, so it is visible in Grafana and Alertmanager - in production
+      # the Watchdog would go to an external dead man's switch service instead.
+      - alert: AlertPipelineHeartbeatMissing
+        expr: increase(mailpit_smtp_accepted_total[20m]) == 0
+        for: 5m
+        labels:
+          severity: page
+          category: platform
+        annotations:
+          summary: No heartbeat e-mail received for 20 minutes
+          description: The Watchdog alert is not reaching the mailbox. Notifications for real alerts are probably not delivered either.
+          runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#alert-delivery
+          dashboard_url: http://127.0.0.1:3030/d/myc-platform
+
+      - alert: TelemetryPipelineDown
+        expr: up{job="otel-collector"} == 0 or absent(up{job="otel-collector"})
+        for: 2m
+        labels:
+          severity: page
+          category: platform
+        annotations:
+          summary: OpenTelemetry Collector is down - no new metrics, traces or logs
+          description: Every signal enters through the collector. Forest data, probes, traces and logs have stopped.
+          runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#telemetry-pipeline-down
+          dashboard_url: http://127.0.0.1:3030/d/myc-platform
+
+      - alert: PlatformComponentDown
+        expr: up{job=~"prometheus|alertmanager|grafana|tempo|loki|mailpit|sloth|json-exporter"} == 0
+        for: 3m
+        labels:
+          severity: ticket
+          category: platform
+        annotations:
+          summary: '{{ $labels.job }} is down'
+          description: Prometheus cannot scrape {{ $labels.instance }}.
+          runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#component-down
+
+      # Root cause for a provider: every synthetic probe in 10 min failed.
+      # Alertmanager uses this to inhibit the provider's SLO and data alerts.
+      - alert: ProviderUnreachable
+        expr: max by (provider) (max_over_time(httpcheck_success[10m])) == 0
+        for: 5m
+        labels:
+          severity: ticket
+          category: platform
+        annotations:
+          summary: '{{ $labels.provider }} is unreachable (all probes failed for 15 min)'
+          description: Related SLO burn and data-quality alerts for this provider are inhibited until it recovers.
+          runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#provider-unreachable
+
+      - alert: CollectorExportQueueFilling
+        expr: max by (exporter) (otelcol_exporter_queue_size / otelcol_exporter_queue_capacity) > 0.8
+        for: 5m
+        labels:
+          severity: ticket
+          category: platform
+        annotations:
+          summary: 'Collector export queue {{ $labels.exporter }} is {{ $value | humanizePercentage }} full'
+          description: The backend is slower than the incoming data. When the queue is full, data is dropped.
+          runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#telemetry-ingestion
+
+      - alert: CollectorRefusingData
+        expr: |
+          sum by (receiver) (rate(otelcol_receiver_refused_metric_points_total[5m]))
+          + sum by (receiver) (rate(otelcol_receiver_refused_spans_total[5m]))
+          + sum by (receiver) (rate(otelcol_receiver_refused_log_records_total[5m]))
+          > 0
+        for: 5m
+        labels:
+          severity: ticket
+          category: platform
+        annotations:
+          summary: 'Collector receiver {{ $labels.receiver }} is refusing data'
+          description: Usually the memory_limiter protecting the collector. Check otelcol_process_memory_rss_bytes on the Platform dashboard.
+          runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#telemetry-ingestion
+
+      - alert: PrometheusOTLPIngestionErrors
+        expr: sum(rate(prometheus_http_requests_total{handler="/api/v1/otlp/v1/metrics", code!~"2.."}[5m])) > 0
+        for: 5m
+        labels:
+          severity: ticket
+          category: platform
+        annotations:
+          summary: Prometheus rejects OTLP writes
+          description: 'Typical causes: out-of-order samples beyond the 30 min window, invalid names, or TSDB problems.'
+          runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#telemetry-ingestion
+
+      - alert: PrometheusRuleEvaluationFailures
+        expr: sum by (rule_group) (increase(prometheus_rule_evaluation_failures_total[10m])) > 0
+        labels:
+          severity: ticket
+          category: platform
+        annotations:
+          summary: 'Rule group {{ $labels.rule_group }} fails to evaluate'
+          description: SLO or alert rules are not being computed. Check Prometheus -> Status -> Rule health.
+
+      # Cardinality guard: span metrics grow with every new span name.
+      - alert: SpanMetricsCardinalityHigh
+        expr: count({__name__=~"traces_span_metrics_.+"}) > 5000
+        for: 30m
+        labels:
+          severity: ticket
+          category: platform
+        annotations:
+          summary: 'span metrics have {{ $value }} series'
+          description: A new instrumentation probably puts unbounded values into span names. Add a filter or drop the dimension in the span_metrics connector.

@@ -1,0 +1,111 @@
+# SLOs for mastodon.social hashtag trends (the "social buzz" signal).
+# Generated into prometheus/rules/slo/mastodon.yml by Sloth. See docs/slo-decisions.md.
+
+version: prometheus/v1
+service: mastodon
+labels:
+  provider: mastodon
+  tier: upstream
+  owner: mycelium
+slos:
+
+  - name: availability
+    objective: 99.5
+    description: Probes of the hashtag API that receive a 2xx response.
+    sli:
+      events:
+        error_query: |
+          sum(count_over_time(httpcheck_success{provider="mastodon"}[{{.window}}]))
+          -
+          sum(sum_over_time(httpcheck_success{provider="mastodon"}[{{.window}}]))
+        total_query: |
+          sum(count_over_time(httpcheck_success{provider="mastodon"}[{{.window}}]))
+    alerting:
+      name: MastodonAvailabilityBudgetBurn
+      labels:
+        category: slo
+      annotations:
+        summary: Mastodon availability SLO is burning its error budget
+        description: Synthetic probes of mastodon.social/api/v1/tags are failing faster than the objective allows.
+        runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#provider-budget-burn
+        dashboard_url: http://127.0.0.1:3030/d/myc-slo?var-service=mastodon
+      page_alert:
+        labels:
+          severity: ticket
+      ticket_alert:
+        labels:
+          severity: none
+
+  - name: latency
+    objective: 99
+    description: Probes that receive a 2xx response within the latency threshold.
+    sli:
+      raw:
+        error_ratio_query: |
+          1 - avg(avg_over_time(provider:probe_latency_good:bool{provider="mastodon"}[{{.window}}]))
+    alerting:
+      name: MastodonLatencyBudgetBurn
+      labels:
+        category: slo
+      annotations:
+        summary: Mastodon latency SLO is burning its error budget
+        description: Too many probes of the hashtag API are slow or failing.
+        runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#provider-budget-burn
+        dashboard_url: http://127.0.0.1:3030/d/myc-slo?var-service=mastodon
+      page_alert:
+        labels:
+          severity: ticket
+      ticket_alert:
+        labels:
+          severity: none
+
+  # The newest day in a tag's history must be *today* (UTC).
+  - name: freshness
+    objective: 99
+    description: Time during which every tracked hashtag reports today's usage.
+    sli:
+      raw:
+        error_ratio_query: |
+          1 - avg(avg_over_time(provider:freshness_good:bool{provider="mastodon"}[{{.window}}]))
+    alerting:
+      name: MastodonFreshnessBudgetBurn
+      labels:
+        category: slo
+      annotations:
+        summary: Mastodon hashtag statistics are stale
+        description: At least one hashtag history does not start with today's date - trends are frozen upstream.
+        runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#provider-budget-burn
+        dashboard_url: http://127.0.0.1:3030/d/myc-slo?var-service=mastodon
+      page_alert:
+        labels:
+          severity: ticket
+      ticket_alert:
+        labels:
+          severity: none
+
+  - name: correctness
+    objective: 99.9
+    description: Response contract checks (gjson validations) that pass.
+    sli:
+      events:
+        error_query: |
+          sum(sum_over_time(httpcheck_validation_failed{provider="mastodon"}[{{.window}}])) or vector(0)
+        total_query: |
+          (sum(sum_over_time(httpcheck_validation_failed{provider="mastodon"}[{{.window}}])) or vector(0))
+          +
+          sum(sum_over_time(httpcheck_validation_passed{provider="mastodon"}[{{.window}}]))
+    alerting:
+      name: MastodonCorrectnessBudgetBurn
+      labels:
+        category: slo
+      annotations:
+        summary: Mastodon responses violate the data contract
+        description: The API answers, but the payload no longer matches what Mycelium expects.
+        runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#contract-broken
+        dashboard_url: http://127.0.0.1:3030/d/myc-slo?var-service=mastodon
+      page_alert:
+        labels:
+          severity: ticket
+      ticket_alert:
+        labels:
+          severity: none

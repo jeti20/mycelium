@@ -1,0 +1,74 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: docker compose config
+        run: docker compose config --quiet
+
+      - name: OpenTelemetry Collector config
+        run: docker compose run --rm otelcol-validate
+
+      - name: SLO specs (Sloth validate)
+        run: docker compose run --rm sloth-validate
+
+      - name: generated SLO rules are up to date (Sloth drift check)
+        run: |
+          docker compose run --rm sloth-generate
+          git diff --exit-code -- prometheus/rules/slo || {
+            echo "::error::prometheus/rules/slo is out of date - run 'docker compose run --rm sloth-generate' and commit"; exit 1; }
+
+      - name: Prometheus config + all rules (promtool)
+        run: docker compose run --rm promtool check config /etc/prometheus/prometheus.yml
+
+      - name: Unit tests - SLIs, burn-rate alerts, domain and platform rules
+        run: docker compose run --rm promtool test rules tests/sli_test.yml tests/slo_test.yml tests/forest_test.yml tests/platform_test.yml
+
+      - name: PromQL lint (pint)
+        run: docker compose run --rm pint
+
+      - name: Alertmanager config (amtool)
+        run: docker compose run --rm amtool
+
+      - name: Alertmanager routing tests
+        run: docker compose run --rm amtool-routes
+
+      - name: Loki config
+        run: docker compose run --rm loki-validate
+
+      - name: Dashboards are valid JSON with unique uids
+        run: |
+          set -euo pipefail
+          for f in grafana/dashboards/*/*.json; do
+            jq -e '.uid and .title and (.panels | length > 0)' "$f" > /dev/null || { echo "invalid: $f"; exit 1; }
+            # queries inside one panel must have unique refIds (Grafana rejects the panel otherwise)
+            jq -e '[.panels[] | (., .panels[]?) | select(.targets) | [.targets[].refId] | length == (unique | length)] | all' "$f" > /dev/null \
+              || { echo "duplicate refId in a panel: $f"; exit 1; }
+          done
+          dups="$(jq -r .uid grafana/dashboards/*/*.json | sort | uniq -d)"
+          test -z "$dups" || { echo "duplicate uids: $dups"; exit 1; }
+
+      - name: YAML files parse
+        run: |
+          set -euo pipefail
+          for f in json-exporter/config.yml otel-collector/*.yaml otel-collector/species.yml tempo/tempo.yaml loki/loki.yaml slos/*.yml grafana/provisioning/*/*.yaml; do
+            yq e '.' "$f" > /dev/null || { echo "invalid: $f"; exit 1; }
+          done

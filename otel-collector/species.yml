@@ -1,0 +1,60 @@
+# Species catalog - the single source of truth for what Mycelium watches.
+#
+# Read by the OpenTelemetry Collector's Prometheus receiver through file-based
+# service discovery (hot-reloaded, no restart). Every entry fans out into three
+# scrape jobs, each building its own API URL from these labels via relabeling:
+#
+#   taxon_id      -> iNaturalist  observations in Poland (place_id=7800)
+#   wiki_article  -> Wikimedia    daily page views of the pl.wikipedia article
+#   gbif_key      -> GBIF         occurrence records in Poland
+#
+# Add a species = add one entry. Look the ids up at
+#   https://api.inaturalist.org/v1/taxa?q=<name>
+#   https://api.gbif.org/v1/species/match?name=<name>&kingdom=Fungi
+# Non-ASCII article names must be percent-encoded (Koźlarz -> Ko%C5%BAlarz).
+#
+# name_en:   English common name (iNaturalist), shown next to the Polish name
+# edibility: edible | toxic | deadly   (drives colours and the Deathcap alerts)
+
+- targets: [boletus-edulis]
+  labels: {species: Boletus edulis, name_pl: borowik szlachetny, name_en: King Bolete, edibility: edible,
+           taxon_id: "48701", gbif_key: "5954958", wiki_article: Borowik_szlachetny}
+
+- targets: [imleria-badia]
+  labels: {species: Imleria badia, name_pl: podgrzybek brunatny, name_en: Bay Bolete, edibility: edible,
+           taxon_id: "510854", gbif_key: "7832732", wiki_article: Podgrzybek_brunatny}
+
+- targets: [cantharellus-cibarius]
+  labels: {species: Cantharellus cibarius, name_pl: pieprznik jadalny (kurka), name_en: Golden Chanterelle, edibility: edible,
+           taxon_id: "47347", gbif_key: "5249504", wiki_article: Pieprznik_jadalny}
+
+- targets: [macrolepiota-procera]
+  labels: {species: Macrolepiota procera, name_pl: czubajka kania, name_en: Parasol, edibility: edible,
+           taxon_id: "63401", gbif_key: "8914748", wiki_article: Czubajka_kania}
+
+- targets: [leccinum-scabrum]
+  labels: {species: Leccinum scabrum, name_pl: koźlarz babka, name_en: Brown Birch-bolete, edibility: edible,
+           taxon_id: "63232", gbif_key: "9141390", wiki_article: Ko%C5%BAlarz_babka}
+
+- targets: [armillaria]
+  # iNaturalist/GBIF: the genus (most finds are only identified to genus).
+  # Wikipedia: "Opieńka" is a redirect to "Armillaria" - redirects collect
+  # almost no views, so we follow readers to the honey fungus article.
+  labels: {species: Armillaria, name_pl: opieńka miodowa, name_en: Honey mushrooms, edibility: edible,
+           taxon_id: "55930", gbif_key: "2526021", wiki_article: Opie%C5%84ka_miodowa}
+
+- targets: [suillus-luteus]
+  labels: {species: Suillus luteus, name_pl: maślak zwyczajny, name_en: Slippery Jack, edibility: edible,
+           taxon_id: "53488", gbif_key: "7777157", wiki_article: Ma%C5%9Blak_zwyczajny}
+
+- targets: [amanita-phalloides]
+  labels: {species: Amanita phalloides, name_pl: muchomor zielonawy, name_en: Deathcap, edibility: deadly,
+           taxon_id: "52135", gbif_key: "5240325", wiki_article: Muchomor_zielonawy}
+
+- targets: [amanita-pantherina]
+  labels: {species: Amanita pantherina, name_pl: muchomor plamisty, name_en: Panthercap, edibility: toxic,
+           taxon_id: "48418", gbif_key: "8961574", wiki_article: Muchomor_plamisty}
+
+- targets: [amanita-muscaria]
+  labels: {species: Amanita muscaria, name_pl: muchomor czerwony, name_en: Fly Agaric, edibility: toxic,
+           taxon_id: "48715", gbif_key: "8168319", wiki_article: Muchomor_czerwony}

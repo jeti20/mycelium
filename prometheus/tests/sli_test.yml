@@ -1,0 +1,257 @@
+# Unit tests for the SLI building blocks (rules/sli.yml).
+#   docker compose run --rm promtool test rules tests/sli_test.yml
+#
+# promtool time starts at 1970-01-01 00:00 UTC, which makes the date math of
+# the Wikimedia freshness SLI testable with exact, readable numbers.
+
+rule_files:
+  - ../rules/sli.yml
+
+evaluation_interval: 30s
+
+tests:
+
+  # ---------------------------------------------------------------------------
+  # Latency SLI: a probe is good only if it is fast AND successful.
+  # Probes every 2 min: fast+ok, fast+ok, slow+ok, fast+failed.
+  # ---------------------------------------------------------------------------
+  - name: latency needs both speed and success
+    interval: 2m
+    input_series:
+      - series: 'httpcheck_duration_milliseconds{provider="inaturalist", http_url="https://api.inaturalist.org/x"}'
+        values: '600 600 3000 600'
+      - series: 'httpcheck_success{provider="inaturalist", http_url="https://api.inaturalist.org/x", http_status_class="2xx"}'
+        values: '1 1 1 0'
+    promql_expr_test:
+      - expr: provider:probe_latency_good:bool
+        eval_time: 3m
+        exp_samples:
+          - labels: 'provider:probe_latency_good:bool{provider="inaturalist"}'
+            value: 1
+      - expr: provider:probe_latency_good:bool      # 3000 ms > 1500 ms threshold
+        eval_time: 5m
+        exp_samples:
+          - labels: 'provider:probe_latency_good:bool{provider="inaturalist"}'
+            value: 0
+      - expr: provider:probe_latency_good:bool      # fast, but the request failed
+        eval_time: 7m
+        exp_samples:
+          - labels: 'provider:probe_latency_good:bool{provider="inaturalist"}'
+            value: 0
+
+  # ---------------------------------------------------------------------------
+  # iNaturalist freshness: the newest observation id must keep changing.
+  # Polled every 4 min; new ids until 8 min, then frozen at 102.
+  # ---------------------------------------------------------------------------
+  - name: frozen observation id makes iNaturalist stale
+    interval: 4m
+    input_series:
+      - series: 'process_start_time_seconds{job="prometheus"}'
+        values: '-3600x1000'
+      - series: 'up{job="otel-collector"}'
+        values: '1x1000'
+      - series: 'up{job="json-exporter"}'
+        values: '1x1000'
+      - series: 'inat_latest_observation_id{provider="inaturalist", scope="fungi-world"}'
+        values: '100 101 102 102 102 102 102 102 102 102'
+    promql_expr_test:
+      - expr: provider:freshness_good:bool{provider="inaturalist"}
+        eval_time: 10m
+        exp_samples:
+          - labels: 'provider:freshness_good:bool{provider="inaturalist"}'
+            value: 1
+      # samples at 12..28 min are all 102 -> no change in the last 20 min
+      - expr: provider:freshness_good:bool{provider="inaturalist"}
+        eval_time: 30m
+        exp_samples:
+          - labels: 'provider:freshness_good:bool{provider="inaturalist"}'
+            value: 0
+
+  - name: no data at all is not fresh data
+    interval: 4m
+    input_series:
+      - series: 'process_start_time_seconds{job="prometheus"}'
+        values: '-3600x10'
+      - series: 'up{job="otel-collector"}'
+        values: '1x10'
+      - series: 'up{job="json-exporter"}'
+        values: '1x10'
+    promql_expr_test:
+      - expr: provider:freshness_good:bool{provider="inaturalist"}
+        eval_time: 10m
+        exp_samples:
+          - labels: 'provider:freshness_good:bool{provider="inaturalist"}'
+            value: 0
+
+  # ---------------------------------------------------------------------------
+  # Wikimedia freshness with PromQL date math. At 1970-01-06 00:00 (5d) the
+  # cut-off is the day before yesterday, 1970-01-04 -> 1970010400.
+  # ---------------------------------------------------------------------------
+  - name: wikimedia date math - cut-off is the day before yesterday
+    interval: 15m
+    input_series:
+      - series: 'process_start_time_seconds{job="prometheus"}'
+        values: '-3600x1000'
+      - series: 'up{job="otel-collector"}'
+        values: '1x1000'
+      - series: 'up{job="json-exporter"}'
+        values: '1x1000'
+      - series: 'wiki_pageviews_latest_day{wiki_article="Borowik_szlachetny"}'
+        values: '1970010500x600'
+    promql_expr_test:
+      - expr: wiki:freshness_cutoff:yyyymmdd00
+        eval_time: 5d
+        exp_samples:
+          - labels: 'wiki:freshness_cutoff:yyyymmdd00'
+            value: 1970010400
+      - expr: provider:freshness_good:bool{provider="wikimedia"}
+        eval_time: 5d
+        exp_samples:
+          - labels: 'provider:freshness_good:bool{provider="wikimedia"}'
+            value: 1
+
+  # A quiet article (zero views on recent days are simply omitted by the API)
+  # must not make the whole dataset look stale - only the newest day counts.
+  - name: a quiet article does not make wikimedia stale
+    interval: 15m
+    input_series:
+      - series: 'process_start_time_seconds{job="prometheus"}'
+        values: '-3600x1000'
+      - series: 'up{job="otel-collector"}'
+        values: '1x1000'
+      - series: 'up{job="json-exporter"}'
+        values: '1x1000'
+      - series: 'wiki_pageviews_latest_day{wiki_article="Borowik_szlachetny"}'
+        values: '1970010500x600'
+      - series: 'wiki_pageviews_latest_day{wiki_article="Grzyby_truj%C4%85ce"}'
+        values: '1970010300x600'
+    promql_expr_test:
+      - expr: provider:freshness_good:bool{provider="wikimedia"}
+        eval_time: 5d
+        exp_samples:
+          - labels: 'provider:freshness_good:bool{provider="wikimedia"}'
+            value: 1
+
+  - name: wikimedia is stale when no article has recent data
+    interval: 15m
+    input_series:
+      - series: 'process_start_time_seconds{job="prometheus"}'
+        values: '-3600x1000'
+      - series: 'up{job="otel-collector"}'
+        values: '1x1000'
+      - series: 'up{job="json-exporter"}'
+        values: '1x1000'
+      - series: 'wiki_pageviews_latest_day{wiki_article="Borowik_szlachetny"}'
+        values: '1970010300x600'
+      - series: 'wiki_pageviews_latest_day{wiki_article="Muchomor_zielonawy"}'
+        values: '1970010300x600'
+    promql_expr_test:
+      - expr: provider:freshness_good:bool{provider="wikimedia"}
+        eval_time: 5d
+        exp_samples:
+          - labels: 'provider:freshness_good:bool{provider="wikimedia"}'
+            value: 0
+
+  # ---------------------------------------------------------------------------
+  # Mastodon freshness: the newest day of every tag must be today (UTC).
+  # ---------------------------------------------------------------------------
+  - name: mastodon tag history must start today
+    interval: 10m
+    input_series:
+      # day 5 (432000 = 1970-01-06 00:00) for both tags during day 5 ...
+      - series: 'process_start_time_seconds{job="prometheus"}'
+        values: '-3600x1000'
+      - series: 'up{job="otel-collector"}'
+        values: '1x1000'
+      - series: 'up{job="json-exporter"}'
+        values: '1x1000'
+      - series: 'mastodon_tag_today_start_timestamp_seconds{tag="fungi"}'
+        values: '432000x800'
+      # ... but one tag is stuck on day 4 (345600)
+      - series: 'mastodon_tag_today_start_timestamp_seconds{tag="grzyby"}'
+        values: '345600x800'
+    promql_expr_test:
+      # at 5d 01:00 the stuck tag is 25 h behind (> 24.5 h)
+      - expr: provider:freshness_good:bool{provider="mastodon"}
+        eval_time: 121h
+        exp_samples:
+          - labels: 'provider:freshness_good:bool{provider="mastodon"}'
+            value: 0
+
+  # ---------------------------------------------------------------------------
+  # Game day finding: when OUR json-exporter is down, iNaturalist data stops
+  # changing too. That is our outage, not the provider's: no provider sample.
+  # The dashboard freshness SLI (about our pipeline) still sees it.
+  # ---------------------------------------------------------------------------
+  - name: our own outage does not burn the provider freshness budget
+    interval: 4m
+    input_series:
+      - series: 'process_start_time_seconds{job="prometheus"}'
+        values: '-3600x20'
+      - series: 'up{job="otel-collector"}'
+        values: '1x20'
+      - series: 'up{job="json-exporter"}'
+        values: '1x5 0x15'
+      - series: 'inat_latest_observation_id{provider="inaturalist", scope="fungi-world"}'
+        values: '100 101 102 103 104 105'
+      - series: 'inat_observations{scope="fungi-pl", provider="inaturalist"}'
+        values: '1000 1001 1002 1003 1004 1005'
+    promql_expr_test:
+      - expr: provider:freshness_good:bool{provider="inaturalist"}
+        eval_time: 50m
+        exp_samples: []
+      - expr: platform:forest_data_fresh:bool
+        eval_time: 50m
+        exp_samples:
+          - labels: 'platform:forest_data_fresh:bool'
+            value: 0
+
+  # ---------------------------------------------------------------------------
+  # Cold start: Prometheus just started and no data has arrived yet. Without
+  # the warm-up gate every freshness SLI would read "stale" and the platform
+  # SLO would page on every `docker compose up`. During warm-up: no sample.
+  # ---------------------------------------------------------------------------
+  - name: no freshness verdict during the 20-minute warm-up
+    interval: 1m
+    input_series:
+      - series: 'process_start_time_seconds{job="prometheus"}'
+        values: '0x60'
+    promql_expr_test:
+      - expr: provider:freshness_good:bool
+        eval_time: 10m
+        exp_samples: []
+      - expr: platform:forest_data_fresh:bool
+        eval_time: 10m
+        exp_samples: []
+      - expr: platform:forest_data_fresh:bool       # warmed up, still no data -> stale
+        eval_time: 25m
+        exp_samples:
+          - labels: 'platform:forest_data_fresh:bool'
+            value: 0
+
+  # ---------------------------------------------------------------------------
+  # End-to-end dashboard freshness: newest stored iNaturalist sample < 10 min.
+  # Samples every 4 min until 20 min, then the pipeline stops.
+  # ---------------------------------------------------------------------------
+  - name: dashboard freshness follows the newest stored sample
+    interval: 4m
+    input_series:
+      - series: 'process_start_time_seconds{job="prometheus"}'
+        values: '-3600x1000'
+      - series: 'up{job="otel-collector"}'
+        values: '1x1000'
+      - series: 'up{job="json-exporter"}'
+        values: '1x1000'
+      - series: 'inat_observations{scope="fungi-pl", provider="inaturalist"}'
+        values: '1000 1001 1002 1003 1004 1005'
+    promql_expr_test:
+      - expr: platform:forest_data_fresh:bool        # newest sample (20 min) is 9 min old
+        eval_time: 29m
+        exp_samples:
+          - labels: 'platform:forest_data_fresh:bool'
+            value: 1
+      - expr: platform:forest_data_fresh:bool        # 11 min old - beyond the 5-min lookback, still found
+        eval_time: 31m
+        exp_samples:
+          - labels: 'platform:forest_data_fresh:bool'
+            value: 0

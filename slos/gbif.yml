@@ -1,0 +1,88 @@
+# SLOs for the GBIF occurrence API (independent biodiversity index).
+# No freshness SLO: GBIF re-indexes datasets in weekly batches, so "no change
+# for days" is normal behaviour, not staleness. See docs/slo-decisions.md.
+
+version: prometheus/v1
+service: gbif
+labels:
+  provider: gbif
+  tier: upstream
+  owner: mycelium
+slos:
+
+  - name: availability
+    objective: 99
+    description: Probes of the occurrence search API that receive a 2xx response.
+    sli:
+      events:
+        error_query: |
+          sum(count_over_time(httpcheck_success{provider="gbif"}[{{.window}}]))
+          -
+          sum(sum_over_time(httpcheck_success{provider="gbif"}[{{.window}}]))
+        total_query: |
+          sum(count_over_time(httpcheck_success{provider="gbif"}[{{.window}}]))
+    alerting:
+      name: GbifAvailabilityBudgetBurn
+      labels:
+        category: slo
+      annotations:
+        summary: GBIF availability SLO is burning its error budget
+        description: Synthetic probes of api.gbif.org are failing faster than the objective allows.
+        runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#provider-budget-burn
+        dashboard_url: http://127.0.0.1:3030/d/myc-slo?var-service=gbif
+      page_alert:
+        labels:
+          severity: ticket
+      ticket_alert:
+        labels:
+          severity: none
+
+  - name: latency
+    objective: 98
+    description: Probes that receive a 2xx response within the latency threshold.
+    sli:
+      raw:
+        error_ratio_query: |
+          1 - avg(avg_over_time(provider:probe_latency_good:bool{provider="gbif"}[{{.window}}]))
+    alerting:
+      name: GbifLatencyBudgetBurn
+      labels:
+        category: slo
+      annotations:
+        summary: GBIF latency SLO is burning its error budget
+        description: Too many probes of the occurrence search API are slow or failing.
+        runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#provider-budget-burn
+        dashboard_url: http://127.0.0.1:3030/d/myc-slo?var-service=gbif
+      page_alert:
+        labels:
+          severity: ticket
+      ticket_alert:
+        labels:
+          severity: none
+
+  - name: correctness
+    objective: 99.9
+    description: Response contract checks (gjson validations) that pass.
+    sli:
+      events:
+        error_query: |
+          sum(sum_over_time(httpcheck_validation_failed{provider="gbif"}[{{.window}}])) or vector(0)
+        total_query: |
+          (sum(sum_over_time(httpcheck_validation_failed{provider="gbif"}[{{.window}}])) or vector(0))
+          +
+          sum(sum_over_time(httpcheck_validation_passed{provider="gbif"}[{{.window}}]))
+    alerting:
+      name: GbifCorrectnessBudgetBurn
+      labels:
+        category: slo
+      annotations:
+        summary: GBIF responses violate the data contract
+        description: The API answers, but the payload no longer matches what Mycelium expects.
+        runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#contract-broken
+        dashboard_url: http://127.0.0.1:3030/d/myc-slo?var-service=gbif
+      page_alert:
+        labels:
+          severity: ticket
+      ticket_alert:
+        labels:
+          severity: none

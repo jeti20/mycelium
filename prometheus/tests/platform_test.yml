@@ -1,0 +1,155 @@
+# Unit tests for platform health and data-quality alerts.
+#   docker compose run --rm promtool test rules tests/platform_test.yml
+
+rule_files:
+  - ../rules/platform.yml
+  - ../rules/data-quality.yml
+
+evaluation_interval: 1m
+
+tests:
+
+  # ---------------------------------------------------------------------------
+  # Dead man's switch: heartbeat e-mails arrive until 30 min, then stop.
+  # 20 min without a new message + 5 min "for" = alert at ~55 min.
+  # ---------------------------------------------------------------------------
+  - name: missing heartbeat e-mails page
+    interval: 1m
+    input_series:
+      - series: 'mailpit_smtp_accepted_total{job="mailpit", instance="mailpit:8025"}'
+        values: '0+1x30 30x60'
+    alert_rule_test:
+      - alertname: AlertPipelineHeartbeatMissing
+        eval_time: 45m
+        exp_alerts: []
+      - alertname: AlertPipelineHeartbeatMissing
+        eval_time: 60m
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              category: platform
+              job: mailpit
+              instance: mailpit:8025
+            exp_annotations:
+              summary: No heartbeat e-mail received for 20 minutes
+              description: The Watchdog alert is not reaching the mailbox. Notifications for real alerts are probably not delivered either.
+              runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#alert-delivery
+              dashboard_url: http://127.0.0.1:3030/d/myc-platform
+
+  # ---------------------------------------------------------------------------
+  # The collector disappears completely (container gone -> no "up" at all).
+  # ---------------------------------------------------------------------------
+  - name: absent collector pages
+    interval: 1m
+    input_series:
+      - series: 'up{job="prometheus", instance="localhost:9090"}'
+        values: '1x10'
+    alert_rule_test:
+      - alertname: TelemetryPipelineDown
+        eval_time: 5m
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              category: platform
+              job: otel-collector
+            exp_annotations:
+              summary: OpenTelemetry Collector is down - no new metrics, traces or logs
+              description: Every signal enters through the collector. Forest data, probes, traces and logs have stopped.
+              runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#telemetry-pipeline-down
+              dashboard_url: http://127.0.0.1:3030/d/myc-platform
+
+  # ---------------------------------------------------------------------------
+  # GBIF stops answering: every probe fails. Root-cause alert for inhibition.
+  # Wikimedia keeps working and must stay quiet.
+  # ---------------------------------------------------------------------------
+  # Healthy until 10 min, failing from 12 min: the last good probe leaves the
+  # 10-min window after 20 min, plus "for: 5m" -> fires at ~26 min.
+  - name: provider unreachable after 15 min of failed probes
+    interval: 2m
+    input_series:
+      - series: 'httpcheck_success{provider="gbif", http_status_class="2xx"}'
+        values: '1x5 0x15'
+      - series: 'httpcheck_success{provider="wikimedia", http_status_class="2xx"}'
+        values: '1x20'
+    alert_rule_test:
+      - alertname: ProviderUnreachable
+        eval_time: 24m
+        exp_alerts: []
+      - alertname: ProviderUnreachable
+        eval_time: 27m
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              category: platform
+              provider: gbif
+            exp_annotations:
+              summary: gbif is unreachable (all probes failed for 15 min)
+              description: Related SLO burn and data-quality alerts for this provider are inhibited until it recovers.
+              runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#provider-unreachable
+
+  # ---------------------------------------------------------------------------
+  # The real consumer fails half of its scrapes while the synthetic probe is
+  # fine -> ConsumerScrapesFailing. When the provider is down entirely (probes
+  # fail too) the alert is suppressed: ProviderUnreachable is the root cause.
+  # ---------------------------------------------------------------------------
+  - name: consumer-side failures are reported only while probes succeed
+    interval: 10m
+    input_series:
+      - series: 'up{job="wikimedia", provider="wikimedia", instance="borowik"}'
+        values: '1 0 1 0 1 0 1 0 1 0 1 0 1 0'
+      - series: 'httpcheck_success{provider="wikimedia", http_status_class="2xx"}'
+        values: '1x13'
+      - series: 'up{job="gbif", provider="gbif", instance="fungi-pl"}'
+        values: '0x13'
+      - series: 'httpcheck_success{provider="gbif", http_status_class="2xx"}'
+        values: '0x13'
+    alert_rule_test:
+      - alertname: ConsumerScrapesFailing
+        eval_time: 2h
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              category: data-quality
+              provider: wikimedia
+            exp_annotations:
+              summary: 'wikimedia: 50% of data scrapes failed in the last hour'
+              description: json-exporter cannot fetch or parse the provider's data while synthetic probes succeed. Check `docker compose logs json-exporter`.
+              runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#consumer-scrapes-failing
+
+  # ---------------------------------------------------------------------------
+  # Game day finding: after the fix the 1 h window still holds the failures.
+  # Scrapes recovered 40 min ago, so the alert must already be resolved.
+  # ---------------------------------------------------------------------------
+  - name: consumer-side alert resolves soon after the fix
+    interval: 5m
+    input_series:
+      - series: 'up{job="wikimedia", provider="wikimedia", instance="borowik"}'
+        values: '1x6 0x4 1x8'
+      - series: 'httpcheck_success{provider="wikimedia", http_status_class="2xx"}'
+        values: '1x18'
+    alert_rule_test:
+      - alertname: ConsumerScrapesFailing
+        eval_time: 90m
+        exp_alerts: []
+
+  # ---------------------------------------------------------------------------
+  # Totals must only grow: a 2 % drop within an hour is a data problem.
+  # (delta() extrapolates to the window edges, hence 2.187 % for a 2 % step.)
+  # ---------------------------------------------------------------------------
+  - name: observation count going backwards
+    interval: 4m
+    input_series:
+      - series: 'inat_observations{scope="fungi-pl", species=""}'
+        values: '10000x15 9800x15'
+    alert_rule_test:
+      - alertname: ObservationCountDropped
+        eval_time: 75m
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              category: data-quality
+              scope: fungi-pl
+            exp_annotations:
+              summary: 'iNaturalist count for fungi-pl  dropped by 2.187% in 1 h'
+              description: Observation totals should only grow. Check whether the upstream index was rebuilt; delta-based panels will show a dip.
+              runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#count-dropped

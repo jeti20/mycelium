@@ -1,0 +1,68 @@
+{{/*
+  Mycelium e-mail templates for Alertmanager.
+  Annotations used: summary, description, runbook_url, dashboard_url.
+*/}}
+
+{{ define "mycelium.emoji" -}}
+{{- if eq .CommonLabels.category "forest" -}}🍄
+{{- else if eq .CommonLabels.severity "page" -}}🚨
+{{- else if eq .CommonLabels.severity "ticket" -}}🎫
+{{- else -}}ℹ️{{- end -}}
+{{- end }}
+
+{{ define "mycelium.subject" -}}
+{{ template "mycelium.emoji" . }} [{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}
+{{- with .CommonLabels.provider }} · {{ . }}{{ end }}
+{{- with .CommonLabels.sloth_slo }} · {{ . }} SLO{{ end }}
+{{- with .CommonLabels.species }} · {{ . }}{{ end }}
+{{- end }}
+
+{{ define "mycelium.text" -}}
+{{ range .Alerts -}}
+[{{ .Status | toUpper }}] {{ .Labels.alertname }} ({{ .Labels.severity }})
+{{ .Annotations.summary }}
+{{ with .Annotations.description }}{{ . }}
+{{ end -}}
+Started: {{ .StartsAt.Format "2006-01-02 15:04:05 MST" }}
+{{ with .Annotations.runbook_url }}Runbook:   {{ . }}
+{{ end -}}
+{{ with .Annotations.dashboard_url }}Dashboard: {{ . }}
+{{ end -}}
+Labels: {{ range .Labels.SortedPairs }}{{ .Name }}={{ .Value }} {{ end }}
+
+{{ end -}}
+Silence: {{ .ExternalURL }}/#/silences/new
+{{- end }}
+
+{{ define "mycelium.html" -}}
+<!doctype html>
+<html><body style="margin:0;padding:24px;background:#f4f1ea;font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#2b2620">
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;margin:auto;background:#ffffff;border-radius:10px;overflow:hidden;border:1px solid #e2dccf">
+  <tr><td style="padding:18px 24px;background:{{ if eq .Status "resolved" }}#3f7d4e{{ else if eq .CommonLabels.severity "page" }}#a3362a{{ else if eq .CommonLabels.category "forest" }}#7a5c2e{{ else }}#b07a1f{{ end }};color:#ffffff">
+    <div style="font-size:13px;opacity:.85;letter-spacing:.08em;text-transform:uppercase">Mycelium · {{ .Status }}{{ with .CommonLabels.severity }} · {{ . }}{{ end }}</div>
+    <div style="font-size:20px;font-weight:600;margin-top:4px">{{ template "mycelium.emoji" . }} {{ .CommonLabels.alertname }}</div>
+  </td></tr>
+  {{ range .Alerts }}
+  <tr><td style="padding:18px 24px;border-bottom:1px solid #eee7da">
+    <div style="font-size:15px;font-weight:600">{{ if eq .Status "resolved" }}✅ {{ end }}{{ .Annotations.summary }}</div>
+    {{ with .Annotations.description }}<div style="margin-top:8px;font-size:14px;line-height:1.5;color:#4a4339">{{ . }}</div>{{ end }}
+    <table cellpadding="0" cellspacing="0" style="margin-top:12px;font-size:12px;color:#6b6257">
+      <tr><td style="padding-right:12px">started</td><td>{{ .StartsAt.Format "2006-01-02 15:04 MST" }}</td></tr>
+      {{ if eq .Status "resolved" }}<tr><td style="padding-right:12px">resolved</td><td>{{ .EndsAt.Format "2006-01-02 15:04 MST" }}</td></tr>{{ end }}
+      {{ range .Labels.SortedPairs }}{{ if not (match "^(alertname|__.*)$" .Name) }}<tr><td style="padding-right:12px">{{ .Name }}</td><td><code>{{ .Value }}</code></td></tr>{{ end }}{{ end }}
+    </table>
+    <div style="margin-top:14px">
+      {{ with .Annotations.dashboard_url }}<a href="{{ . }}" style="display:inline-block;margin-right:8px;padding:7px 12px;background:#2b2620;color:#fff;border-radius:6px;text-decoration:none;font-size:13px">📈 Dashboard</a>{{ end }}
+      {{ with .Annotations.runbook_url }}<a href="{{ . }}" style="display:inline-block;margin-right:8px;padding:7px 12px;background:#efe9dd;color:#2b2620;border-radius:6px;text-decoration:none;font-size:13px">📖 Runbook</a>{{ end }}
+      <a href="{{ .GeneratorURL }}" style="display:inline-block;padding:7px 12px;background:#efe9dd;color:#2b2620;border-radius:6px;text-decoration:none;font-size:13px">🔎 Query</a>
+    </div>
+  </td></tr>
+  {{ end }}
+  <tr><td style="padding:14px 24px;font-size:12px;color:#8a8175;background:#faf8f3">
+    <a href="{{ .ExternalURL }}/#/silences/new" style="color:#7a5c2e">Silence</a> ·
+    <a href="{{ .ExternalURL }}" style="color:#7a5c2e">Alertmanager</a> ·
+    Data: iNaturalist, Wikimedia, Mastodon, GBIF. Mycelium is not a mushroom identification service - never eat a mushroom based on a dashboard.
+  </td></tr>
+</table>
+</body></html>
+{{- end }}

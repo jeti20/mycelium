@@ -1,0 +1,142 @@
+# Domain rules: what the forest is doing.
+#
+# Three PromQL lessons live in this file:
+#   1. inat_observations is a GAUGE that usually grows. increase() would read
+#      every small drop (a deleted or re-identified observation) as a counter
+#      reset and add the whole total - delta() / deriv() are the right tools.
+#   2. Slow, sparse signals (polled every 10 min) fall out of the 5-min
+#      lookback window; last_over_time() bridges them explicitly.
+#   3. Labels can carry structure: lat/lon are split out of "51.04,20.79" with
+#      label_replace so Grafana's Geomap can place the newest finds.
+
+groups:
+
+  - name: forest-config
+    interval: 5m
+    rules:
+      # New fungi observations per day in Poland at the height of the season
+      # (iNaturalist histogram, October). Season index = today / this baseline.
+      - record: forest:season_baseline:observations_per_day
+        expr: vector(400)
+
+  - name: forest-observations
+    interval: 1m
+    rules:
+
+      # New observations in the last 24 h per query (species and aggregates).
+      - record: forest:inat_new_observations:24h
+        expr: clamp_min(delta(inat_observations[24h]), 0)
+
+      # Current pace as observations/day, from a linear fit over 6 h
+      # (reacts within hours, smooths out single uploads).
+      - record: forest:inat_pace:per_day
+        expr: clamp_min(deriv(inat_observations[6h]) * 86400, 0)
+
+      # max by (species) first: when a catalog label changes (e.g. a new name_en),
+      # old and new series overlap for the whole 24 h window and would be
+      # counted twice.
+      - record: forest:inat_new_observations_by_edibility:24h
+        expr: sum by (edibility) (max by (species, edibility) (forest:inat_new_observations:24h{scope="species"}))
+
+      # 0 = off-season, 1 = peak season.
+      - record: forest:season_index:ratio
+        expr: |
+          clamp_max(
+            sum(forest:inat_new_observations:24h{scope="fungi-pl"})
+            / on () forest:season_baseline:observations_per_day,
+            1
+          )
+
+      # Share of Polish fungi observations confirmed by the community.
+      - record: forest:inat_research_grade:ratio
+        expr: |
+          max(inat_observations{scope="fungi-pl-research"})
+          / on ()
+          max(inat_observations{scope="fungi-pl"})
+
+      # The newest find per species with coordinates as labels (for Geomap).
+      - record: forest:inat_latest_observation:geo
+        expr: |
+          label_replace(
+            label_replace(
+              max without (instance, job) (inat_latest_observation_info{scope="species"}),
+              "lat", "$1", "location", "([-0-9.]+),.*"
+            ),
+            "lon", "$1", "location", ".*,([-0-9.]+)"
+          )
+
+  - name: forest-interest
+    interval: 5m
+    rules:
+
+      # Page views on the last complete day (polled every 10 min, bridged).
+      - record: forest:wiki_pageviews:latest
+        expr: max without (instance, job) (last_over_time(wiki_pageviews_latest[1h]))
+
+      # Two weeks of page views from a single scrape (one series per day label).
+      - record: forest:wiki_pageviews:14d
+        expr: sum without (day, instance, job) (last_over_time(wiki_pageviews_daily[20m]))
+
+      # Interest spike: yesterday vs the 14-day mean. 2 = twice the usual.
+      - record: forest:wiki_interest:spike_ratio
+        expr: forest:wiki_pageviews:latest / (forest:wiki_pageviews:14d / 14)
+
+      # "Hype index": how many Wikipedia readers per new field observation.
+      - record: forest:hype:pageviews_per_observation
+        expr: |
+          forest:wiki_pageviews:latest{species!="-"}
+          / on (species) group_left ()
+          (max by (species) (forest:inat_new_observations:24h{scope="species"}) + 1)
+
+      # Mastodon hashtag usage over the 7 days in the API's history.
+      - record: forest:mastodon_uses:7d
+        expr: sum by (tag) (last_over_time(mastodon_tag_uses[15m]))
+
+      # GBIF vs iNaturalist: GBIF only receives research-grade iNaturalist
+      # records (weekly), plus museum and survey data. Ratio per species.
+      - record: forest:gbif_to_inat:ratio
+        expr: |
+          max by (species) (last_over_time(gbif_occurrences{scope="species"}[1h]))
+          / on (species)
+          max by (species) (inat_observations{scope="species"})
+
+  - name: forest-notices
+    rules:
+
+      # Domain notices go to the "grzybiarze" (mushroom pickers) mailbox, muted
+      # at night. severity=none: nobody is on call for the forest.
+      - alert: DeathcapReported
+        expr: forest:inat_new_observations:24h{species="Amanita phalloides"} >= 1
+        for: 10m
+        labels:
+          severity: none
+          category: forest
+        annotations:
+          summary: 'Deathcap (muchomor zielonawy) reported in Poland: {{ $value | printf "%.0f" }} new observation(s) in 24 h'
+          description: >-
+            Amanita phalloides causes most fatal mushroom poisonings in Europe. It is often
+            mistaken for green russulas or young parasols. Never eat a mushroom you have not
+            identified with certainty. Poison information: 112.
+          dashboard_url: http://127.0.0.1:3030/d/myc-forest
+
+      - alert: MushroomSeasonPeak
+        expr: forest:season_index:ratio >= 0.8
+        for: 2h
+        labels:
+          severity: none
+          category: forest
+        annotations:
+          summary: 'Peak mushroom season: {{ $value | humanizePercentage }} of the October baseline'
+          description: More than 80 % of a peak-season day's worth of fungi observations were reported in Poland in the last 24 h.
+          dashboard_url: http://127.0.0.1:3030/d/myc-forest
+
+      - alert: PoisoningInterestSpike
+        expr: forest:wiki_interest:spike_ratio{wiki_article="Grzyby_truj%C4%85ce"} > 2
+        for: 30m
+        labels:
+          severity: none
+          category: forest
+        annotations:
+          summary: 'Interest in poisonous mushrooms is {{ $value | printf "%.1f" }}x the 14-day average'
+          description: Page views of "Grzyby trujące" (poisonous mushrooms) on Polish Wikipedia spiked. This usually follows news about poisonings.
+          dashboard_url: http://127.0.0.1:3030/d/myc-interest

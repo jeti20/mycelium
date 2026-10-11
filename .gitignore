@@ -1,0 +1,22 @@
+# secrets / local config
+.env
+.env.*
+!.env.example
+
+# runtime data (everything persistent lives in Docker volumes)
+data/
+*.db
+*.log
+
+# editors / OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# scratch
+tmp/
+scratch/

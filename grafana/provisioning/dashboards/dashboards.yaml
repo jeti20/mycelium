@@ -1,0 +1,13 @@
+apiVersion: 1
+
+providers:
+  - name: mycelium
+    type: file
+    disableDeletion: true
+    # Dashboards can be edited and saved in the UI; export the JSON back to
+    # grafana/dashboards/ to keep a change (the file wins on the next reload).
+    allowUiUpdates: true
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: true

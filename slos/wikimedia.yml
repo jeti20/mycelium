@@ -1,0 +1,112 @@
+# SLOs for the Wikimedia Analytics API (pl.wikipedia page views = public interest).
+# Generated into prometheus/rules/slo/wikimedia.yml by Sloth. See docs/slo-decisions.md.
+
+version: prometheus/v1
+service: wikimedia
+labels:
+  provider: wikimedia
+  tier: upstream
+  owner: mycelium
+slos:
+
+  - name: availability
+    objective: 99.5
+    description: Probes of the page views API that receive a 2xx response.
+    sli:
+      events:
+        error_query: |
+          sum(count_over_time(httpcheck_success{provider="wikimedia"}[{{.window}}]))
+          -
+          sum(sum_over_time(httpcheck_success{provider="wikimedia"}[{{.window}}]))
+        total_query: |
+          sum(count_over_time(httpcheck_success{provider="wikimedia"}[{{.window}}]))
+    alerting:
+      name: WikimediaAvailabilityBudgetBurn
+      labels:
+        category: slo
+      annotations:
+        summary: Wikimedia availability SLO is burning its error budget
+        description: Synthetic probes of wikimedia.org/api/rest_v1 are failing faster than the objective allows.
+        runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#provider-budget-burn
+        dashboard_url: http://127.0.0.1:3030/d/myc-slo?var-service=wikimedia
+      page_alert:
+        labels:
+          severity: ticket
+      ticket_alert:
+        labels:
+          severity: none
+
+  - name: latency
+    objective: 99
+    description: Probes that receive a 2xx response within the latency threshold.
+    sli:
+      raw:
+        error_ratio_query: |
+          1 - avg(avg_over_time(provider:probe_latency_good:bool{provider="wikimedia"}[{{.window}}]))
+    alerting:
+      name: WikimediaLatencyBudgetBurn
+      labels:
+        category: slo
+      annotations:
+        summary: Wikimedia latency SLO is burning its error budget
+        description: Too many probes of the page views API are slow or failing.
+        runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#provider-budget-burn
+        dashboard_url: http://127.0.0.1:3030/d/myc-slo?var-service=wikimedia
+      page_alert:
+        labels:
+          severity: ticket
+      ticket_alert:
+        labels:
+          severity: none
+
+  # Daily data: "fresh" means the newest data point is no older than the day
+  # before yesterday. Computed with PromQL date functions (see sli.yml).
+  - name: freshness
+    objective: 99
+    description: Time during which the newest page views data point is at most 2 days old.
+    sli:
+      raw:
+        error_ratio_query: |
+          1 - avg(avg_over_time(provider:freshness_good:bool{provider="wikimedia"}[{{.window}}]))
+    alerting:
+      name: WikimediaFreshnessBudgetBurn
+      labels:
+        category: slo
+      annotations:
+        summary: Wikimedia page views data is late
+        description: The newest daily page views are older than 2 days - the analytics pipeline upstream is delayed.
+        runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#provider-budget-burn
+        dashboard_url: http://127.0.0.1:3030/d/myc-slo?var-service=wikimedia
+      page_alert:
+        labels:
+          severity: ticket
+      ticket_alert:
+        labels:
+          severity: none
+
+  - name: correctness
+    objective: 99.9
+    description: Response contract checks (gjson validations) that pass.
+    sli:
+      events:
+        error_query: |
+          sum(sum_over_time(httpcheck_validation_failed{provider="wikimedia"}[{{.window}}])) or vector(0)
+        total_query: |
+          (sum(sum_over_time(httpcheck_validation_failed{provider="wikimedia"}[{{.window}}])) or vector(0))
+          +
+          sum(sum_over_time(httpcheck_validation_passed{provider="wikimedia"}[{{.window}}]))
+    alerting:
+      name: WikimediaCorrectnessBudgetBurn
+      labels:
+        category: slo
+      annotations:
+        summary: Wikimedia responses violate the data contract
+        description: The API answers, but the payload no longer matches what Mycelium expects.
+        runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#contract-broken
+        dashboard_url: http://127.0.0.1:3030/d/myc-slo?var-service=wikimedia
+      page_alert:
+        labels:
+          severity: ticket
+      ticket_alert:
+        labels:
+          severity: none

@@ -1,0 +1,1538 @@
+{
+  "uid": "myc-forest",
+  "title": "Forest · what is growing",
+  "description": "Species-level view of Poland's mushroom season from iNaturalist, with GBIF and Wikipedia alongside.",
+  "tags": [
+    "mycelium",
+    "forest"
+  ],
+  "timezone": "browser",
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 41,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "refresh": "5m",
+  "fiscalYearStartMonth": 0,
+  "liveNow": false,
+  "weekStart": "monday",
+  "timepicker": {
+    "refresh_intervals": [
+      "30s",
+      "1m",
+      "5m",
+      "15m",
+      "1h"
+    ]
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "edibility",
+        "label": "Edibility",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": {
+          "query": "label_values(inat_observations{scope=\"species\"}, edibility)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery",
+          "qryType": 1
+        },
+        "definition": "label_values(inat_observations{scope=\"species\"}, edibility)",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "hide": 0,
+        "regex": "",
+        "sort": 1,
+        "options": [],
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        }
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "links": [
+    {
+      "title": "Mycelium",
+      "type": "dashboards",
+      "tags": [
+        "mycelium"
+      ],
+      "asDropdown": true,
+      "includeVars": false,
+      "keepTime": true,
+      "icon": "external link",
+      "targetBlank": false
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "barchart",
+      "title": "New observations in Poland · last 24 h",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 12
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sort_desc(max by (species, name_pl, edibility, taxon_id) (forest:inat_new_observations:24h{scope=\"species\", edibility=~\"$edibility\"}) + on (species) group_left () (max by (species) (inat_observations{scope=\"species\"}) / 1e9))",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "editorMode": "code",
+          "interval": "1m"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "edible": {
+                  "color": "#56A64B",
+                  "index": 0,
+                  "text": "edible"
+                },
+                "toxic": {
+                  "color": "#FF9830",
+                  "index": 1,
+                  "text": "toxic"
+                },
+                "deadly": {
+                  "color": "#E02F44",
+                  "index": 2,
+                  "text": "☠ deadly"
+                },
+                "topic": {
+                  "color": "#5794F2",
+                  "index": 3,
+                  "text": "topic"
+                }
+              }
+            }
+          ],
+          "custom": {
+            "lineWidth": 0,
+            "fillOpacity": 85,
+            "gradientMode": "none",
+            "axisBorderShow": false
+          },
+          "links": [
+            {
+              "title": "Species page on iNaturalist",
+              "url": "https://www.inaturalist.org/taxa/${__data.fields.taxon_id}",
+              "targetBlank": true
+            }
+          ]
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "taxon_id"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "viz": true,
+                  "legend": true,
+                  "tooltip": true
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xField": "species",
+        "colorByField": "edibility",
+        "showValue": "always",
+        "stacking": "none",
+        "groupWidth": 0.75,
+        "barWidth": 0.85,
+        "barRadius": 0.1,
+        "fullHighlight": false,
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "description": "New iNaturalist observations per species in the last 24 h. Colour = edibility. Ties are broken by the all-time total (added as total/1e9, invisible at 0 decimals) - without it, species with equal counts swapped places on every refresh.",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "instance": true,
+              "job": true,
+              "provider": true,
+              "scope": true,
+              "species": true
+            },
+            "renameByName": {
+              "Value": "new · 24 h",
+              "name_pl": "species"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Reporting pace · observations per day (6 h linear trend)",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 12
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (name_pl) (forest:inat_pace:per_day{scope=\"species\", edibility=~\"$edibility\"})",
+          "legendFormat": "{{name_pl}}",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "pointSize": 4,
+            "spanNulls": false,
+            "axisBorderShow": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            },
+            "barAlignment": 0,
+            "insertNulls": false,
+            "axisPlacement": "auto"
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "deriv() over 6 h × 86 400: how fast the total grows right now, in observations/day. Reacts within hours; the 24 h delta on the left is the stable view."
+    },
+    {
+      "id": 3,
+      "type": "piechart",
+      "title": "Edible vs poisonous · 24 h",
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 6,
+        "h": 9
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "forest:inat_new_observations_by_edibility:24h",
+          "legendFormat": "{{edibility}}",
+          "range": false,
+          "instant": true,
+          "format": "time_series",
+          "editorMode": "code",
+          "interval": "1m"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "edible": {
+                  "color": "#56A64B",
+                  "index": 0,
+                  "text": "edible"
+                },
+                "toxic": {
+                  "color": "#FF9830",
+                  "index": 1,
+                  "text": "toxic"
+                },
+                "deadly": {
+                  "color": "#E02F44",
+                  "index": 2,
+                  "text": "☠ deadly"
+                },
+                "topic": {
+                  "color": "#5794F2",
+                  "index": 3,
+                  "text": "topic"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "edible"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#56A64B"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "toxic"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "deadly"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E02F44"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "pieType": "donut",
+        "displayLabels": [
+          "percent"
+        ],
+        "sort": "desc",
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "bottom",
+          "values": [
+            "value"
+          ]
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "description": "Share of new observations among the 10 tracked species by edibility."
+    },
+    {
+      "id": 4,
+      "type": "geomap",
+      "title": "Newest find per species",
+      "gridPos": {
+        "x": 6,
+        "y": 12,
+        "w": 7,
+        "h": 18
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "forest:inat_latest_observation:geo{edibility=~\"$edibility\"}",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "editorMode": "code",
+          "interval": "1m"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#FADE2A",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "edible": {
+                  "color": "#56A64B",
+                  "index": 0,
+                  "text": "edible"
+                },
+                "toxic": {
+                  "color": "#FF9830",
+                  "index": 1,
+                  "text": "toxic"
+                },
+                "deadly": {
+                  "color": "#E02F44",
+                  "index": 2,
+                  "text": "☠ deadly"
+                },
+                "topic": {
+                  "color": "#5794F2",
+                  "index": 3,
+                  "text": "topic"
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "taxon_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Species page on iNaturalist",
+                    "url": "https://www.inaturalist.org/taxa/${__value.raw}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "edibility"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "edible": {
+                        "color": "#56A64B",
+                        "index": 0,
+                        "text": "edible"
+                      },
+                      "toxic": {
+                        "color": "#FF9830",
+                        "index": 1,
+                        "text": "toxic"
+                      },
+                      "deadly": {
+                        "color": "#E02F44",
+                        "index": 2,
+                        "text": "☠ deadly"
+                      },
+                      "topic": {
+                        "color": "#5794F2",
+                        "index": 3,
+                        "text": "topic"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "view": {
+          "id": "coords",
+          "lat": 52.0,
+          "lon": 19.3,
+          "zoom": 5.6,
+          "allLayers": true
+        },
+        "controls": {
+          "showZoom": true,
+          "mouseWheelZoom": false,
+          "showAttribution": true
+        },
+        "basemap": {
+          "type": "default",
+          "name": "Basemap",
+          "config": {}
+        },
+        "layers": [
+          {
+            "type": "markers",
+            "name": "finds",
+            "config": {
+              "showLegend": false,
+              "style": {
+                "size": {
+                  "fixed": 11
+                },
+                "opacity": 0.85,
+                "color": {
+                  "field": "edibility",
+                  "fixed": "#FADE2A"
+                },
+                "symbol": {
+                  "mode": "fixed",
+                  "fixed": "img/icons/marker/circle.svg"
+                },
+                "symbolAlign": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                },
+                "textConfig": {
+                  "fontSize": 12,
+                  "offsetX": 0,
+                  "offsetY": 0,
+                  "textAlign": "center",
+                  "textBaseline": "middle"
+                }
+              }
+            },
+            "location": {
+              "mode": "coords",
+              "latitude": "lat",
+              "longitude": "lon"
+            },
+            "tooltip": true
+          }
+        ],
+        "tooltip": {
+          "mode": "details"
+        }
+      },
+      "description": "One marker per tracked species: its most recent observation. Coordinates are split out of iNaturalist's \"lat,lon\" string with label_replace() in a recording rule — PromQL can carry geography too.",
+      "transformations": [
+        {
+          "id": "convertFieldType",
+          "options": {
+            "conversions": [
+              {
+                "targetField": "lat",
+                "destinationType": "number"
+              },
+              {
+                "targetField": "lon",
+                "destinationType": "number"
+              }
+            ],
+            "fields": {}
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value": true,
+              "provider": true,
+              "scope": true,
+              "location": true
+            },
+            "renameByName": {
+              "name_pl": "species (pl)",
+              "place_guess": "place",
+              "observed_on": "observed"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Top species · selected time range (live)",
+      "gridPos": {
+        "x": 13,
+        "y": 12,
+        "w": 11,
+        "h": 18
+      },
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "infinity"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "infinity"
+          },
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "format": "table",
+          "url": "https://api.inaturalist.org/v1/observations/species_counts?taxon_id=47170&place_id=7800&d1=${__from:date:YYYY-MM-DD}&d2=${__to:date:YYYY-MM-DD}&per_page=15&locale=pl",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "results",
+          "columns": [
+            {
+              "selector": "taxon.default_photo.square_url",
+              "text": "photo",
+              "type": "string"
+            },
+            {
+              "selector": "taxon.name",
+              "text": "nazwa łacińska (Latin name)",
+              "type": "string"
+            },
+            {
+              "selector": "taxon.preferred_common_name",
+              "text": "nazwa polska (Polish name)",
+              "type": "string"
+            },
+            {
+              "selector": "taxon.english_common_name",
+              "text": "nazwa angielska (English name)",
+              "type": "string"
+            },
+            {
+              "selector": "count",
+              "text": "observations",
+              "type": "number"
+            },
+            {
+              "selector": "taxon.id",
+              "text": "taxon",
+              "type": "number"
+            }
+          ],
+          "filters": []
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "wrapHeaderText": true
+          },
+          "links": [
+            {
+              "title": "Species page",
+              "url": "https://www.inaturalist.org/taxa/${__data.fields.taxon}",
+              "targetBlank": true
+            }
+          ]
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "photo"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "image"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 64
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "taxon"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "nazwa polska (Polish name)"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": "—"
+              },
+              {
+                "id": "custom.width",
+                "value": 190
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "nazwa łacińska (Latin name)"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 185
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "nazwa angielska (English name)"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": "—"
+              },
+              {
+                "id": "custom.width",
+                "value": 205
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "observations"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "gauge",
+                  "mode": "gradient",
+                  "valueDisplayMode": "text"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "continuous-GrYlRd"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "lg",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        }
+      },
+      "description": "Live from the iNaturalist API (Infinity datasource, queried when the panel loads). Most observed fungi in Poland between the dashboard's from/to dates — change the time picker to compare weeks or seasons.",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "photo": 0,
+              "nazwa polska (Polish name)": 1,
+              "nazwa łacińska (Latin name)": 2,
+              "nazwa angielska (English name)": 3,
+              "observations": 4
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "barchart",
+      "title": "When is mushroom season? · all-time records in Poland by month",
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 6,
+        "h": 9
+      },
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "infinity"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "infinity"
+          },
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "format": "table",
+          "url": "https://api.inaturalist.org/v1/observations/histogram?taxon_id=47170&place_id=7800&interval=month_of_year&date_field=observed",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "$each(results.month_of_year, function($v, $k) { {\"m\": $number($k), \"month\": [\"Jan\",\"Feb\",\"Mar\",\"Apr\",\"May\",\"Jun\",\"Jul\",\"Aug\",\"Sep\",\"Oct\",\"Nov\",\"Dec\"][$number($k)-1], \"observations\": $v} })^(m)",
+          "columns": [],
+          "filters": []
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "custom": {
+            "lineWidth": 0,
+            "fillOpacity": 90,
+            "gradientMode": "scheme",
+            "axisBorderShow": false
+          },
+          "color": {
+            "mode": "continuous-YlRd"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "vertical",
+        "xField": "month",
+        "showValue": "never",
+        "stacking": "none",
+        "groupWidth": 0.8,
+        "barWidth": 0.9,
+        "barRadius": 0.15,
+        "xTickLabelRotation": 0,
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "description": "Live from the iNaturalist API (Infinity datasource, queried when the panel loads). The API returns an object keyed by month number; a JSONata expression in the Infinity query turns it into sorted rows — no code.",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "m": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Species overview · three sources side by side",
+      "gridPos": {
+        "x": 0,
+        "y": 30,
+        "w": 24,
+        "h": 14
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (species, name_pl, edibility, taxon_id) (inat_observations{scope=\"species\", edibility=~\"$edibility\"})",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "editorMode": "code",
+          "interval": "1m"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (species) (forest:inat_new_observations:24h{scope=\"species\"})",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "editorMode": "code",
+          "interval": "1m"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (species) (forest:inat_pace:per_day{scope=\"species\"})",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "editorMode": "code",
+          "interval": "1m"
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (species) (last_over_time(gbif_occurrences{scope=\"species\"}[1h]))",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "editorMode": "code",
+          "interval": "1m"
+        },
+        {
+          "refId": "E",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (species, wiki_article) (forest:wiki_pageviews:latest{species!=\"-\"})",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "editorMode": "code",
+          "interval": "1m"
+        },
+        {
+          "refId": "F",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (species) (forest:gbif_to_inat:ratio)",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "editorMode": "code",
+          "interval": "1m"
+        },
+        {
+          "refId": "G",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (species, name_en) (last_over_time(inat_observations{scope=\"species\", name_en!=\"\"}[10m]))",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "editorMode": "code",
+          "interval": "1m"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "wrapHeaderText": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "nazwa polska (Polish name)"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 200
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "iNaturalist: ${__data.fields.taxon_id}",
+                    "url": "https://www.inaturalist.org/taxa/${__data.fields.taxon_id}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "nazwa angielska (English name)"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 205
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "nazwa łacińska (Latin name)"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 185
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "taxon_id"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "wiki_article"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "edibility"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 95
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "edible": {
+                        "color": "#56A64B",
+                        "index": 0,
+                        "text": "edible"
+                      },
+                      "toxic": {
+                        "color": "#FF9830",
+                        "index": 1,
+                        "text": "toxic"
+                      },
+                      "deadly": {
+                        "color": "#E02F44",
+                        "index": 2,
+                        "text": "☠ deadly"
+                      },
+                      "topic": {
+                        "color": "#5794F2",
+                        "index": 3,
+                        "text": "topic"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "iNat total"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom.width",
+                "value": 95
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "new · 24 h"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom.width",
+                "value": 170
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "gauge",
+                  "mode": "lcd",
+                  "valueDisplayMode": "text"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "continuous-GrYlRd"
+                }
+              },
+              {
+                "id": "max",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "pace / day"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "custom.width",
+                "value": 90
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "GBIF records"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom.width",
+                "value": 105
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Wikipedia · yesterday"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "pl.wikipedia",
+                    "url": "https://pl.wikipedia.org/wiki/${__data.fields.wiki_article}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "GBIF ÷ iNat"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom.width",
+                "value": 105
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        }
+      },
+      "description": "Seven PromQL queries joined into one table on the species label (Join by field + Organize transformations). Click a name for the species page on iNaturalist, a view count for the Wikipedia article. GBIF holds fewer Polish records than iNaturalist: it only receives research-grade iNaturalist data, weekly.",
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "species",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Time 1": true,
+              "Time 2": true,
+              "Time 3": true,
+              "Time 4": true,
+              "Time 5": true,
+              "Time 6": true,
+              "Time 7": true,
+              "Value #G": true
+            },
+            "indexByName": {
+              "name_pl": 0,
+              "name_en": 1,
+              "species": 2,
+              "edibility": 3,
+              "Value #A": 4,
+              "Value #B": 5,
+              "Value #C": 6,
+              "Value #D": 7,
+              "Value #F": 8,
+              "Value #E": 9
+            },
+            "renameByName": {
+              "name_pl": "nazwa polska (Polish name)",
+              "name_en": "nazwa angielska (English name)",
+              "species": "nazwa łacińska (Latin name)",
+              "Value #A": "iNat total",
+              "Value #B": "new · 24 h",
+              "Value #C": "pace / day",
+              "Value #D": "GBIF records",
+              "Value #E": "Wikipedia · yesterday",
+              "Value #F": "GBIF ÷ iNat"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "iNat total",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Total observations in Poland (iNaturalist)",
+      "gridPos": {
+        "x": 0,
+        "y": 44,
+        "w": 16,
+        "h": 12
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (name_pl) (inat_observations{scope=\"species\", edibility=~\"$edibility\"})",
+          "legendFormat": "{{name_pl}}",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "pointSize": 4,
+            "spanNulls": false,
+            "axisBorderShow": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            },
+            "barAlignment": 0,
+            "insertNulls": false,
+            "axisPlacement": "auto",
+            "scaleDistribution": {
+              "type": "log",
+              "log": 10
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Raw totals as returned by the API. A gauge that 'usually grows' — the occasional step down is a deleted or re-identified record (ObservationCountDropped catches big ones)."
+    },
+    {
+      "id": 9,
+      "type": "text",
+      "title": "Safety",
+      "gridPos": {
+        "x": 16,
+        "y": 44,
+        "w": 8,
+        "h": 12
+      },
+      "transparent": false,
+      "options": {
+        "mode": "markdown",
+        "content": "\n### ☠ Never eat a mushroom based on a dashboard\n\nThese numbers count **reports**, not mushrooms. Observations are uploaded by volunteers, identified by the community and can be wrong — that is exactly why the share of *research grade* records is tracked.\n\n**Muchomor zielonawy** (*Amanita phalloides*) causes most fatal mushroom poisonings in Europe and is often confused with green russulas or young parasols.\n\nPoisoning: call **112**.\n",
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        }
+      }
+    }
+  ]
+}

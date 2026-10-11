@@ -1,0 +1,203 @@
+# Unit tests for the Sloth-generated SLO rules - proof that the multi-window,
+# multi-burn-rate alerts behave as the SRE Workbook says they should.
+#   docker compose run --rm promtool test rules tests/slo_test.yml
+
+rule_files:
+  - ../rules/slo/inaturalist.yml
+  - ../rules/slo/platform.yml
+
+evaluation_interval: 1m
+
+tests:
+
+  # ---------------------------------------------------------------------------
+  # Hard outage: one hour fine, then every probe fails.
+  # 5 min later both windows of the fast tier (5m & 1h > 14.4x budget) agree.
+  # The slow tier fires too - Alertmanager inhibits it (sloth_severity).
+  # iNaturalist is upstream, so even the fast tier is only a ticket.
+  # ---------------------------------------------------------------------------
+  - name: hard outage trips the fast burn tier within minutes
+    interval: 2m
+    input_series:
+      - series: 'httpcheck_success{provider="inaturalist", http_status_class="2xx"}'
+        values: '1x30 0x30'
+    promql_expr_test:
+      # 100 % errors against a 0.5 % budget = burn rate 200
+      - expr: round(slo:current_burn_rate:ratio{sloth_id="inaturalist-availability"})
+        eval_time: 80m
+        exp_samples:
+          - labels: '{owner="mycelium", provider="inaturalist", sloth_id="inaturalist-availability", sloth_service="inaturalist", sloth_slo="availability", sloth_window="5m", tier="upstream"}'
+            value: 200
+    alert_rule_test:
+      - alertname: InaturalistAvailabilityBudgetBurn
+        eval_time: 59m
+        exp_alerts: []
+      - alertname: InaturalistAvailabilityBudgetBurn
+        eval_time: 66m
+        exp_alerts:
+          - exp_labels:
+              category: slo
+              severity: ticket
+              sloth_severity: page
+              sloth_id: inaturalist-availability
+              sloth_service: inaturalist
+              sloth_slo: availability
+              owner: mycelium
+              provider: inaturalist
+              tier: upstream
+            exp_annotations: &inat_availability_annotations_page
+              summary: iNaturalist availability SLO is burning its error budget
+              description: Synthetic probes of api.inaturalist.org are failing faster than the 99.5 % objective allows.
+              runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#provider-budget-burn
+              dashboard_url: http://127.0.0.1:3030/d/myc-slo?var-service=inaturalist
+              title: (page) inaturalist availability SLO error budget burn rate is too fast.
+          - exp_labels:
+              category: slo
+              severity: none
+              sloth_severity: ticket
+              sloth_id: inaturalist-availability
+              sloth_service: inaturalist
+              sloth_slo: availability
+              owner: mycelium
+              provider: inaturalist
+              tier: upstream
+            exp_annotations:
+              summary: iNaturalist availability SLO is burning its error budget
+              description: Synthetic probes of api.inaturalist.org are failing faster than the 99.5 % objective allows.
+              runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#provider-budget-burn
+              dashboard_url: http://127.0.0.1:3030/d/myc-slo?var-service=inaturalist
+              title: (ticket) inaturalist availability SLO error budget burn rate is too fast.
+
+  # ---------------------------------------------------------------------------
+  # Slow leak: a steady 2 % of probes fail (burn rate 4). Too slow for the fast
+  # tier (needs 14.4x or 6x), but the slow tier (3x over 2h AND 1d) catches it.
+  # Fractional samples stand in for "2 of every 100 probes fail".
+  # ---------------------------------------------------------------------------
+  - name: slow leak trips only the slow burn tier
+    interval: 2m
+    input_series:
+      - series: 'httpcheck_success{provider="inaturalist", http_status_class="2xx"}'
+        values: '0.98x180'
+    alert_rule_test:
+      - alertname: InaturalistAvailabilityBudgetBurn
+        eval_time: 3h
+        exp_alerts:
+          - exp_labels:
+              category: slo
+              severity: none
+              sloth_severity: ticket
+              sloth_id: inaturalist-availability
+              sloth_service: inaturalist
+              sloth_slo: availability
+              owner: mycelium
+              provider: inaturalist
+              tier: upstream
+            exp_annotations:
+              summary: iNaturalist availability SLO is burning its error budget
+              description: Synthetic probes of api.inaturalist.org are failing faster than the 99.5 % objective allows.
+              runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#provider-budget-burn
+              dashboard_url: http://127.0.0.1:3030/d/myc-slo?var-service=inaturalist
+              title: (ticket) inaturalist availability SLO error budget burn rate is too fast.
+
+  # ---------------------------------------------------------------------------
+  # Correctness: the API answers 200, but 1 of 2 contract checks fails.
+  # Availability stays perfect - only the correctness SLI sees it.
+  # ---------------------------------------------------------------------------
+  - name: a broken contract burns correctness, not availability
+    interval: 2m
+    input_series:
+      - series: 'httpcheck_success{provider="inaturalist", http_status_class="2xx"}'
+        values: '1x60'
+      - series: 'httpcheck_validation_passed{provider="inaturalist", validation_type="json_path"}'
+        values: '1x60'
+      - series: 'httpcheck_validation_failed{provider="inaturalist", validation_type="json_path"}'
+        values: '1x60'
+    promql_expr_test:
+      - expr: slo:sli_error:ratio_rate1h{sloth_service="inaturalist"}
+        eval_time: 2h
+        exp_samples:
+          - labels: 'slo:sli_error:ratio_rate1h{owner="mycelium", provider="inaturalist", sloth_id="inaturalist-availability", sloth_service="inaturalist", sloth_slo="availability", sloth_window="1h", tier="upstream"}'
+            value: 0
+          - labels: 'slo:sli_error:ratio_rate1h{owner="mycelium", provider="inaturalist", sloth_id="inaturalist-correctness", sloth_service="inaturalist", sloth_slo="correctness", sloth_window="1h", tier="upstream"}'
+            value: 0.5
+
+  # ---------------------------------------------------------------------------
+  # NaN guard: no e-mail at all in the window. A plain failed/total ratio would
+  # be 0/0 = NaN and poison the 30-day average; the guarded SLI is simply absent.
+  # ---------------------------------------------------------------------------
+  - name: no notifications means no sample, not NaN
+    interval: 1m
+    input_series:
+      - series: 'alertmanager_notifications_total{integration="email"}'
+        values: '7x60'
+      - series: 'alertmanager_notifications_failed_total{integration="email"}'
+        values: '0x60'
+    promql_expr_test:
+      - expr: slo:sli_error:ratio_rate5m{sloth_slo="alert-delivery"}
+        eval_time: 30m
+        exp_samples: []
+
+  - name: failing notifications burn the alert delivery budget
+    interval: 1m
+    input_series:
+      - series: 'alertmanager_notifications_total{integration="email"}'
+        values: '0+2x60'
+      - series: 'alertmanager_notifications_failed_total{integration="email"}'
+        values: '0+1x60'
+    promql_expr_test:
+      - expr: slo:sli_error:ratio_rate5m{sloth_slo="alert-delivery"}
+        eval_time: 30m
+        exp_samples:
+          - labels: 'slo:sli_error:ratio_rate5m{owner="mycelium", sloth_id="mycelium-platform-alert-delivery", sloth_service="mycelium-platform", sloth_slo="alert-delivery", sloth_window="5m", tier="platform"}'
+            value: 0.5
+
+  # ---------------------------------------------------------------------------
+  # Dashboard latency from a native histogram (span metrics). Schema 0 buckets:
+  # (0.5,1] (1,2] (2,4]. Each minute 100 requests: 90 under 2 s, 10 over.
+  # histogram_fraction(0, 2) = 0.9 -> error ratio 0.1 -> 10x the 1 % budget.
+  # ---------------------------------------------------------------------------
+  - name: native histogram latency SLI pages on slow dashboards
+    interval: 1m
+    input_series:
+      - series: 'traces_span_metrics_duration_seconds{service_name="grafana", span_kind="SPAN_KIND_SERVER", span_name="HTTP POST /api/ds/query"}'
+        values: '{{schema:0 sum:0 count:0 buckets:[0 0 0]}}+{{schema:0 sum:150 count:100 buckets:[0 90 10]}}x90'
+    promql_expr_test:
+      - expr: round(slo:sli_error:ratio_rate1h{sloth_slo="dashboard-latency"}, 0.001)
+        eval_time: 80m
+        exp_samples:
+          - labels: '{owner="mycelium", sloth_id="mycelium-platform-dashboard-latency", sloth_service="mycelium-platform", sloth_slo="dashboard-latency", sloth_window="1h", tier="platform"}'
+            value: 0.1
+    alert_rule_test:
+      - alertname: DashboardLatencyBudgetBurn
+        eval_time: 80m
+        exp_alerts:
+          - exp_labels:
+              category: slo
+              severity: page
+              sloth_severity: page
+              sloth_id: mycelium-platform-dashboard-latency
+              sloth_service: mycelium-platform
+              sloth_slo: dashboard-latency
+              owner: mycelium
+              tier: platform
+            exp_annotations:
+              summary: Dashboards are slow - the latency SLO is burning its error budget
+              description: Too many panel data requests take longer than 2 s. Open the exemplars on the Platform dashboard to jump to slow traces.
+              runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#dashboard-latency
+              dashboard_url: http://127.0.0.1:3030/d/myc-platform
+              title: (page) mycelium-platform dashboard-latency SLO error budget burn rate is too fast.
+          - exp_labels:
+              category: slo
+              severity: ticket
+              sloth_severity: ticket
+              sloth_id: mycelium-platform-dashboard-latency
+              sloth_service: mycelium-platform
+              sloth_slo: dashboard-latency
+              owner: mycelium
+              tier: platform
+            exp_annotations:
+              summary: Dashboards are slow - the latency SLO is burning its error budget
+              description: Too many panel data requests take longer than 2 s. Open the exemplars on the Platform dashboard to jump to slow traces.
+              runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#dashboard-latency
+              dashboard_url: http://127.0.0.1:3030/d/myc-platform
+              title: (ticket) mycelium-platform dashboard-latency SLO error budget burn rate is too fast.

@@ -1,0 +1,99 @@
+# json_exporter: turns public JSON APIs into Prometheus metrics using JSONPath
+# (Kubernetes flavour: https://kubernetes.io/docs/reference/kubectl/jsonpath/).
+#
+# The OpenTelemetry Collector calls  /probe?module=<module>&target=<url>  and
+# attaches the source labels (taxon, article, tag...). Nothing here knows about
+# labels or schedules: one module = one response shape.
+
+modules:
+
+  # --------------------------------------------------------- iNaturalist ----
+  # https://api.inaturalist.org/v1/docs/  (CC BY-NC per observation; counts are facts)
+  # Query: ...observations?taxon_id=X&place_id=7800&per_page=1&order_by=id&order=desc
+  # -> total number of observations + the newest one.
+  inat_observations:
+    headers:
+      User-Agent: mycelium-observability/1.0 (+https://github.com/jeti20/mycelium; portfolio project, polite polling)
+    metrics:
+      - name: inat_observations
+        help: Total number of iNaturalist observations matching the query (a gauge, not a counter - records can be deleted or re-identified).
+        path: '{.total_results}'
+        valuetype: gauge
+      - name: inat_latest_observation_id
+        help: Id of the newest observation matching the query. Ids grow monotonically; a change means new data arrived (freshness SLI).
+        path: '{.results[0].id}'
+        valuetype: gauge
+      - name: inat_latest_observation
+        help: The newest observation as labels (value = its id). One series per taxon at a time.
+        type: object
+        valuetype: gauge
+        path: '{.results[0]}'
+        labels:
+          place_guess: '{.place_guess}'
+          location: '{.location}'
+          observed_on: '{.observed_on}'
+          quality_grade: '{.quality_grade}'
+          observer: '{.user.login}'
+        values:
+          info: '{.id}'
+
+  # ---------------------------------------------------- Wikimedia REST -----
+  # https://doc.wikimedia.org/generated-data-platform/aqs/analytics-api/ (CC0)
+  # Query: .../per-article/pl.wikipedia.org/all-access/user/<Article>/daily/20260101/20301231
+  # The end date is in the future on purpose: the API returns everything up to
+  # the last complete day, so a static URL keeps working forever.
+  wiki_pageviews:
+    headers:
+      User-Agent: mycelium-observability/1.0 (+https://github.com/jeti20/mycelium; portfolio project, polite polling)
+    metrics:
+      - name: wiki_pageviews_latest
+        help: Page views by humans (agent=user) on the last complete day.
+        path: '{.items[-1:].views}'
+        valuetype: gauge
+      - name: wiki_pageviews_latest_day
+        help: Day of the latest data point encoded as the number YYYYMMDD00 (Wikimedia's timestamp format). Freshness SLI via PromQL date math.
+        path: '{.items[-1:].timestamp}'
+        valuetype: gauge
+      - name: wiki_pageviews
+        help: Daily page views for each of the last 14 complete days (label day=YYYYMMDD00). Gives a 2-week history from the very first scrape.
+        type: object
+        valuetype: gauge
+        path: '{.items[-14:]}'
+        labels:
+          day: '{.timestamp}'
+        values:
+          daily: '{.views}'
+
+  # ----------------------------------------------------------- Mastodon ----
+  # https://docs.joinmastodon.org/methods/tags/#get  (public, no auth)
+  # history[0] is *today* (partial, UTC), history[1] is yesterday, ... 7 days total.
+  mastodon_tag:
+    headers:
+      User-Agent: mycelium-observability/1.0 (+https://github.com/jeti20/mycelium; portfolio project, polite polling)
+    metrics:
+      - name: mastodon_tag_today_start_timestamp_seconds
+        help: Start (00:00 UTC) of the newest day in the hashtag history. Freshness - should always be today.
+        path: '{.history[0].day}'
+        valuetype: gauge
+      - name: mastodon_tag
+        help: Daily hashtag usage on mastodon.social for the last 7 days (label day = epoch seconds of 00:00 UTC).
+        type: object
+        valuetype: gauge
+        path: '{.history[*]}'
+        labels:
+          day: '{.day}'
+        values:
+          uses: '{.uses}'
+          accounts: '{.accounts}'
+
+  # --------------------------------------------------------------- GBIF ----
+  # https://techdocs.gbif.org/en/openapi/v1/occurrence  (CC0 / CC BY per dataset)
+  # Query: .../occurrence/search?country=PL&taxonKey=5&limit=0  -> count only
+  gbif_occurrences:
+    headers:
+      User-Agent: mycelium-observability/1.0 (+https://github.com/jeti20/mycelium; portfolio project, polite polling)
+    metrics:
+      - name: gbif_occurrences
+        help: Number of GBIF occurrence records matching the query. Re-indexed in batches, so it moves in steps.
+        path: '{.count}'
+        valuetype: gauge

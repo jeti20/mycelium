@@ -1,0 +1,136 @@
+# SLOs for Mycelium itself - the part we own and can fix, so these page.
+# Generated into prometheus/rules/slo/platform.yml by Sloth. See docs/slo-decisions.md.
+
+version: prometheus/v1
+service: mycelium-platform
+labels:
+  tier: platform
+  owner: mycelium
+slos:
+
+  # What a user actually waits for: Grafana's /api/ds/query (every panel's data
+  # request). Measured from 100 % of Grafana's server spans by the collector's
+  # span_metrics connector, as a native histogram - histogram_fraction() gives
+  # the share of requests under 2 s directly, no bucket guessing.
+  # The "and" guard drops windows without any request (0/0 would be NaN and
+  # poison the 30-day average).
+  - name: dashboard-latency
+    objective: 99
+    description: Dashboard data requests (POST /api/ds/query) served in under 2 seconds.
+    sli:
+      raw:
+        error_ratio_query: |
+          (
+            1 - histogram_fraction(0, 2,
+              sum(rate(traces_span_metrics_duration_seconds{service_name="grafana", span_kind="SPAN_KIND_SERVER", span_name="HTTP POST /api/ds/query"}[{{.window}}]))
+            )
+          )
+          and on ()
+          (histogram_count(sum(rate(traces_span_metrics_duration_seconds{service_name="grafana", span_kind="SPAN_KIND_SERVER", span_name="HTTP POST /api/ds/query"}[{{.window}}]))) > 0)
+    alerting:
+      name: DashboardLatencyBudgetBurn
+      labels:
+        category: slo
+      annotations:
+        summary: Dashboards are slow - the latency SLO is burning its error budget
+        description: Too many panel data requests take longer than 2 s. Open the exemplars on the Platform dashboard to jump to slow traces.
+        runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#dashboard-latency
+        dashboard_url: http://127.0.0.1:3030/d/myc-platform
+      page_alert:
+        labels:
+          severity: page
+      ticket_alert:
+        labels:
+          severity: ticket
+
+  # What a user actually sees: is the home dashboard showing current data?
+  # Covers the whole chain - API, json-exporter, collector, OTLP ingest, TSDB.
+  - name: dashboard-freshness
+    objective: 99.5
+    description: Time during which the newest iNaturalist sample in Prometheus is younger than 10 minutes.
+    sli:
+      raw:
+        error_ratio_query: |
+          1 - avg_over_time(platform:forest_data_fresh:bool[{{.window}}])
+    alerting:
+      name: DashboardFreshnessBudgetBurn
+      labels:
+        category: slo
+      annotations:
+        summary: Dashboards show stale forest data
+        description: The newest iNaturalist sample stored in Prometheus is older than 10 minutes too often. Check the collector, json-exporter and OTLP ingestion.
+        runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#dashboard-freshness
+        dashboard_url: http://127.0.0.1:3030/d/myc-platform
+      page_alert:
+        labels:
+          severity: page
+      ticket_alert:
+        labels:
+          severity: ticket
+
+  # Event-based: failed / total notifications. Written as a raw ratio with a
+  # guard: in a 5-min window without any e-mail the plain ratio is 0/0 = NaN,
+  # and one NaN sample would poison Sloth's 30-day average for a month.
+  - name: alert-delivery
+    objective: 99.9
+    description: E-mail notifications Alertmanager hands over to SMTP successfully.
+    sli:
+      raw:
+        error_ratio_query: |
+          (
+            sum(rate(alertmanager_notifications_failed_total{integration="email"}[{{.window}}]))
+            /
+            sum(rate(alertmanager_notifications_total{integration="email"}[{{.window}}]))
+          )
+          and on ()
+          (sum(rate(alertmanager_notifications_total{integration="email"}[{{.window}}])) > 0)
+    alerting:
+      name: AlertDeliveryBudgetBurn
+      labels:
+        category: slo
+      annotations:
+        summary: Alert notifications are failing
+        description: Alertmanager cannot deliver e-mails reliably. Alerts may be firing that nobody receives - check the Alertmanager UI directly.
+        runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#alert-delivery
+        dashboard_url: http://127.0.0.1:3030/d/myc-platform
+      page_alert:
+        labels:
+          severity: page
+      ticket_alert:
+        labels:
+          severity: ticket
+
+  # Event-based: metric points the collector failed to hand to Prometheus.
+  # The failed counter only exists after the first failure ("or vector(0)"),
+  # and the same NaN guard as above.
+  - name: telemetry-ingestion
+    objective: 99.9
+    description: Metric points the OpenTelemetry Collector delivers to Prometheus over OTLP.
+    sli:
+      raw:
+        error_ratio_query: |
+          (
+            (sum(rate(otelcol_exporter_send_failed_metric_points_total{exporter="otlp_http/prometheus"}[{{.window}}])) or vector(0))
+            /
+            (
+              sum(rate(otelcol_exporter_sent_metric_points_total{exporter="otlp_http/prometheus"}[{{.window}}]))
+              + (sum(rate(otelcol_exporter_send_failed_metric_points_total{exporter="otlp_http/prometheus"}[{{.window}}])) or vector(0))
+            )
+          )
+          and on ()
+          (sum(rate(otelcol_exporter_sent_metric_points_total{exporter="otlp_http/prometheus"}[{{.window}}])) > 0)
+    alerting:
+      name: TelemetryIngestionBudgetBurn
+      labels:
+        category: slo
+      annotations:
+        summary: The collector is losing metrics on the way to Prometheus
+        description: OTLP exports from the OpenTelemetry Collector to Prometheus are failing. Dashboards and SLOs will have gaps.
+        runbook_url: https://github.com/jeti20/mycelium/blob/main/docs/runbooks.md#telemetry-ingestion
+        dashboard_url: http://127.0.0.1:3030/d/myc-platform
+      page_alert:
+        labels:
+          severity: page
+      ticket_alert:
+        labels:
+          severity: ticket

@@ -1,0 +1,1315 @@
+{
+  "uid": "myc-home",
+  "title": "Mycelium",
+  "description": "Overview: mushroom season in Poland plus the health of the system watching it.",
+  "tags": [
+    "mycelium",
+    "home"
+  ],
+  "timezone": "browser",
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 41,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "refresh": "5m",
+  "fiscalYearStartMonth": 0,
+  "liveNow": false,
+  "weekStart": "monday",
+  "timepicker": {
+    "refresh_intervals": [
+      "30s",
+      "1m",
+      "5m",
+      "15m",
+      "1h"
+    ]
+  },
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "links": [
+    {
+      "title": "Mycelium",
+      "type": "dashboards",
+      "tags": [
+        "mycelium"
+      ],
+      "asDropdown": true,
+      "includeVars": false,
+      "keepTime": true,
+      "icon": "external link",
+      "targetBlank": false
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 3
+      },
+      "transparent": true,
+      "options": {
+        "mode": "html",
+        "content": "<div style=\"display:flex;align-items:center;gap:18px;padding:4px 8px\">\n<div style=\"font-size:42px\">🍄</div>\n<div><div style=\"font-size:22px;font-weight:600\">Mycelium · Poland's mushroom season, observed like production</div>\n<div style=\"opacity:.75\">Citizen-science observations (iNaturalist), public interest (Wikipedia), social buzz (Mastodon) and a biodiversity index (GBIF) —\ncollected with the OpenTelemetry Collector, held to SLOs written as code (Sloth), alerting by e-mail through Alertmanager.\n<a href=\"/d/myc-forest\">Forest</a> · <a href=\"/d/myc-interest\">Interest &amp; buzz</a> · <a href=\"/d/myc-slo\">SLOs</a> · <a href=\"/d/myc-platform\">Platform</a></div></div></div>",
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "gauge",
+      "title": "Mushroom season index",
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 5,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "forest:season_index:ratio",
+          "legendFormat": "season",
+          "range": false,
+          "instant": true,
+          "format": "time_series",
+          "editorMode": "code",
+          "interval": "1m"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#6E6E6E",
+                "value": null
+              },
+              {
+                "color": "#FADE2A",
+                "value": 0.25
+              },
+              {
+                "color": "#96D98D",
+                "value": 0.5
+              },
+              {
+                "color": "#37872D",
+                "value": 0.8
+              }
+            ]
+          },
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "orientation": "auto",
+        "minVizWidth": 75,
+        "minVizHeight": 75,
+        "sizing": "auto"
+      },
+      "description": "New fungi observations reported in Poland in the last 24 h, as a share of a peak-season day (400/day, the October baseline from iNaturalist's own histogram). 0 = off-season, 100 % = peak."
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "New fungi observations · 24 h",
+      "gridPos": {
+        "x": 5,
+        "y": 3,
+        "w": 5,
+        "h": 3
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(forest:inat_new_observations:24h{scope=\"fungi-pl\"})",
+          "legendFormat": "Poland",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#8AB8FF",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "textMode": "auto",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "percentChangeColorMode": "standard"
+      },
+      "description": "delta() over 24 h of the iNaturalist total for kingdom Fungi in Poland. Not increase(): the total is a gauge (see forest.yml)."
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "☠ Muchomor zielonawy (Deathcap) · 24 h",
+      "gridPos": {
+        "x": 10,
+        "y": 3,
+        "w": 5,
+        "h": 3
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(forest:inat_new_observations:24h{species=\"Amanita phalloides\"}) or vector(0)",
+          "legendFormat": "Amanita phalloides",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "#E02F44",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "textMode": "auto",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "percentChangeColorMode": "standard"
+      },
+      "description": "New iNaturalist observations of Amanita phalloides (muchomor zielonawy) in Poland. Above zero, the DeathcapReported notice goes to the mushroom pickers' mailbox."
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Community-verified",
+      "gridPos": {
+        "x": 15,
+        "y": 3,
+        "w": 4,
+        "h": 3
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "forest:inat_research_grade:ratio",
+          "legendFormat": "research grade",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#B877D9",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "auto",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "percentChangeColorMode": "standard"
+      },
+      "description": "Share of all Polish fungi observations that reached 'research grade' (identification confirmed by the community)."
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Wikipedia readers · yesterday",
+      "gridPos": {
+        "x": 19,
+        "y": 3,
+        "w": 5,
+        "h": 3
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(forest:wiki_pageviews:latest)",
+          "legendFormat": "pl.wikipedia",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#5794F2",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "textMode": "auto",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "percentChangeColorMode": "standard"
+      },
+      "description": "Human page views of all tracked mushroom articles on Polish Wikipedia on the last complete day."
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "#fungi & friends on Mastodon · 7 d",
+      "gridPos": {
+        "x": 5,
+        "y": 6,
+        "w": 5,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(forest:mastodon_uses:7d)",
+          "legendFormat": "posts",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#FF9830",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "auto",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "percentChangeColorMode": "standard"
+      },
+      "description": "Uses of #fungi #mushrooms #mushroom #mycology #FungiFriday #foraging #grzyby on mastodon.social over the 7 days in the API's history."
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Species with finds · 24 h",
+      "gridPos": {
+        "x": 10,
+        "y": 6,
+        "w": 5,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(max by (species) (forest:inat_new_observations:24h{scope=\"species\"}) >= 1) or vector(0)",
+          "legendFormat": "of 10 tracked",
+          "range": true,
+          "instant": false,
+          "format": "time_series",
+          "editorMode": "code"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#73BF69",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "textMode": "auto",
+        "orientation": "auto",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "percentChangeColorMode": "standard"
+      },
+      "description": "How many of the 10 tracked species got at least one new observation in Poland in the last 24 h."
+    },
+    {
+      "id": 9,
+      "type": "bargauge",
+      "title": "Error budget left · 30 d",
+      "gridPos": {
+        "x": 15,
+        "y": 6,
+        "w": 9,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "min by (sloth_service) (slo:period_error_budget_remaining:ratio)",
+          "legendFormat": "{{sloth_service}}",
+          "range": false,
+          "instant": true,
+          "format": "time_series",
+          "editorMode": "code",
+          "interval": "1m"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#E02F44",
+                "value": null
+              },
+              {
+                "color": "#FF9830",
+                "value": 0.25
+              },
+              {
+                "color": "#FADE2A",
+                "value": 0.5
+              },
+              {
+                "color": "#56A64B",
+                "value": 0.75
+              }
+            ]
+          },
+          "links": [
+            {
+              "title": "SLO details",
+              "url": "/d/myc-slo?var-service=${__field.labels.sloth_service}"
+            }
+          ],
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "vertical",
+        "displayMode": "lcd",
+        "valueMode": "color",
+        "namePlacement": "auto",
+        "showUnfilled": true,
+        "sizing": "auto",
+        "minVizWidth": 8,
+        "minVizHeight": 16,
+        "maxVizHeight": 300,
+        "legend": {
+          "showLegend": false
+        }
+      },
+      "description": "Worst remaining error budget per service (Sloth). Below 0 = the SLO is violated for the 30-day window. Details on the SLO dashboard."
+    },
+    {
+      "id": 10,
+      "type": "geomap",
+      "title": "Newest fungi finds in Poland",
+      "gridPos": {
+        "x": 0,
+        "y": 10,
+        "w": 10,
+        "h": 13
+      },
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "infinity"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "infinity"
+          },
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "format": "table",
+          "url": "https://api.inaturalist.org/v1/observations?taxon_id=47170&place_id=7800&photos=true&per_page=60&order_by=id&order=desc&locale=pl",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "results",
+          "columns": [
+            {
+              "selector": "photos.0.url",
+              "text": "photo",
+              "type": "string"
+            },
+            {
+              "selector": "taxon.name",
+              "text": "nazwa łacińska (Latin name)",
+              "type": "string"
+            },
+            {
+              "selector": "taxon.preferred_common_name",
+              "text": "nazwa polska (Polish name)",
+              "type": "string"
+            },
+            {
+              "selector": "taxon.english_common_name",
+              "text": "nazwa angielska (English name)",
+              "type": "string"
+            },
+            {
+              "selector": "place_guess",
+              "text": "place",
+              "type": "string"
+            },
+            {
+              "selector": "time_observed_at",
+              "text": "observed",
+              "type": "timestamp"
+            },
+            {
+              "selector": "quality_grade",
+              "text": "grade",
+              "type": "string"
+            },
+            {
+              "selector": "user.login",
+              "text": "observer",
+              "type": "string"
+            },
+            {
+              "selector": "geojson.coordinates.1",
+              "text": "lat",
+              "type": "number"
+            },
+            {
+              "selector": "geojson.coordinates.0",
+              "text": "lon",
+              "type": "number"
+            },
+            {
+              "selector": "id",
+              "text": "id",
+              "type": "number"
+            }
+          ],
+          "filters": []
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#FADE2A",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "research": {
+                  "color": "#56A64B",
+                  "index": 0,
+                  "text": "research grade"
+                },
+                "needs_id": {
+                  "color": "#FADE2A",
+                  "index": 1,
+                  "text": "needs ID"
+                },
+                "casual": {
+                  "color": "#8F8F8F",
+                  "index": 2,
+                  "text": "casual"
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "grade"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "research": {
+                        "color": "#56A64B",
+                        "index": 0,
+                        "text": "research grade"
+                      },
+                      "needs_id": {
+                        "color": "#FADE2A",
+                        "index": 1,
+                        "text": "needs ID"
+                      },
+                      "casual": {
+                        "color": "#8F8F8F",
+                        "index": 2,
+                        "text": "casual"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "view": {
+          "id": "coords",
+          "lat": 52.0,
+          "lon": 19.3,
+          "zoom": 5.6,
+          "allLayers": true
+        },
+        "controls": {
+          "showZoom": true,
+          "mouseWheelZoom": false,
+          "showAttribution": true
+        },
+        "basemap": {
+          "type": "default",
+          "name": "Basemap",
+          "config": {}
+        },
+        "layers": [
+          {
+            "type": "markers",
+            "name": "finds",
+            "config": {
+              "showLegend": false,
+              "style": {
+                "size": {
+                  "fixed": 7
+                },
+                "opacity": 0.85,
+                "color": {
+                  "field": "grade",
+                  "fixed": "#FADE2A"
+                },
+                "symbol": {
+                  "mode": "fixed",
+                  "fixed": "img/icons/marker/circle.svg"
+                },
+                "symbolAlign": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                },
+                "textConfig": {
+                  "fontSize": 12,
+                  "offsetX": 0,
+                  "offsetY": 0,
+                  "textAlign": "center",
+                  "textBaseline": "middle"
+                }
+              }
+            },
+            "location": {
+              "mode": "coords",
+              "latitude": "lat",
+              "longitude": "lon"
+            },
+            "tooltip": true
+          }
+        ],
+        "tooltip": {
+          "mode": "details"
+        }
+      },
+      "description": "Live from the iNaturalist API (Infinity datasource, queried when the panel loads). The 60 most recent fungi observations with photos."
+    },
+    {
+      "id": 11,
+      "type": "table",
+      "title": "Newest observations (live, iNaturalist)",
+      "gridPos": {
+        "x": 10,
+        "y": 10,
+        "w": 14,
+        "h": 13
+      },
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "infinity"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "infinity"
+          },
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "format": "table",
+          "url": "https://api.inaturalist.org/v1/observations?taxon_id=47170&place_id=7800&photos=true&per_page=60&order_by=id&order=desc&locale=pl",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "results",
+          "columns": [
+            {
+              "selector": "photos.0.url",
+              "text": "photo",
+              "type": "string"
+            },
+            {
+              "selector": "taxon.name",
+              "text": "nazwa łacińska (Latin name)",
+              "type": "string"
+            },
+            {
+              "selector": "taxon.preferred_common_name",
+              "text": "nazwa polska (Polish name)",
+              "type": "string"
+            },
+            {
+              "selector": "taxon.english_common_name",
+              "text": "nazwa angielska (English name)",
+              "type": "string"
+            },
+            {
+              "selector": "place_guess",
+              "text": "place",
+              "type": "string"
+            },
+            {
+              "selector": "time_observed_at",
+              "text": "observed",
+              "type": "timestamp"
+            },
+            {
+              "selector": "quality_grade",
+              "text": "grade",
+              "type": "string"
+            },
+            {
+              "selector": "user.login",
+              "text": "observer",
+              "type": "string"
+            },
+            {
+              "selector": "geojson.coordinates.1",
+              "text": "lat",
+              "type": "number"
+            },
+            {
+              "selector": "geojson.coordinates.0",
+              "text": "lon",
+              "type": "number"
+            },
+            {
+              "selector": "id",
+              "text": "id",
+              "type": "number"
+            }
+          ],
+          "filters": []
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "filterable": false,
+            "wrapHeaderText": true
+          },
+          "links": [
+            {
+              "title": "Open on iNaturalist",
+              "url": "https://www.inaturalist.org/observations/${__data.fields.id}",
+              "targetBlank": true
+            }
+          ]
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "photo"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "image"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 64
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "nazwa łacińska (Latin name)"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 190
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "nazwa polska (Polish name)"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 190
+              },
+              {
+                "id": "noValue",
+                "value": "—"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "nazwa angielska (English name)"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 180
+              },
+              {
+                "id": "noValue",
+                "value": "—"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "grade"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "research": {
+                        "color": "#56A64B",
+                        "index": 0,
+                        "text": "research"
+                      },
+                      "needs_id": {
+                        "color": "#FADE2A",
+                        "index": 1,
+                        "text": "needs ID"
+                      },
+                      "casual": {
+                        "color": "#8F8F8F",
+                        "index": 2,
+                        "text": "casual"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 90
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "observed"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeFromNow"
+              },
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "id"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "lg",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        },
+        "sortBy": [
+          {
+            "displayName": "observed",
+            "desc": true
+          }
+        ]
+      },
+      "description": "Live from the iNaturalist API (Infinity datasource, queried when the panel loads). Click a row to open the observation. Photos © their observers (mostly CC BY-NC).",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "lat": true,
+              "lon": true
+            },
+            "indexByName": {
+              "photo": 0,
+              "nazwa polska (Polish name)": 1,
+              "nazwa łacińska (Latin name)": 2,
+              "nazwa angielska (English name)": 3,
+              "place": 4,
+              "observed": 5,
+              "grade": 6,
+              "observer": 7
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "What is firing right now (empty = all quiet)",
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 14,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "ALERTS{alertstate=\"firing\", alertname!=\"Watchdog\"}",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "editorMode": "code",
+          "interval": "1m"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "wrapHeaderText": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "severity"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "page": {
+                        "color": "#C4162A",
+                        "index": 0
+                      },
+                      "ticket": {
+                        "color": "#FF9830",
+                        "index": 1
+                      },
+                      "none": {
+                        "color": "#6E6E6E",
+                        "index": 2
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        }
+      },
+      "description": "Active Prometheus alerts (excluding the always-firing Watchdog). Routing: page → #oncall, ticket → #tickets (working hours), forest → #grzybiarze, none → nobody. Open Mailpit at http://127.0.0.1:8025 to read the e-mails.",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value": true,
+              "__name__": true,
+              "alertstate": true,
+              "owner": true,
+              "sloth_id": true,
+              "sloth_service": true,
+              "tier": true,
+              "job": true,
+              "instance": true
+            },
+            "indexByName": {
+              "alertname": 0,
+              "severity": 1,
+              "category": 2,
+              "provider": 3,
+              "sloth_slo": 4,
+              "sloth_severity": 5
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "text",
+      "title": "Where to look",
+      "gridPos": {
+        "x": 14,
+        "y": 23,
+        "w": 10,
+        "h": 8
+      },
+      "transparent": false,
+      "options": {
+        "mode": "markdown",
+        "content": "\n| | |\n|---|---|\n| 📬 **Mailpit** – every alert e-mail | [127.0.0.1:8025](http://127.0.0.1:8025) |\n| 🎯 **Sloth UI** – SLO list & budgets | [127.0.0.1:8082](http://127.0.0.1:8082) |\n| 🔥 **Alertmanager** – routing, silences | [127.0.0.1:9094](http://127.0.0.1:9094) |\n| 📈 **Prometheus** – rules, TSDB | [127.0.0.1:9091](http://127.0.0.1:9091) |\n| 🧵 **Collector zPages** – live pipelines | [127.0.0.1:55679/debug/pipelinez](http://127.0.0.1:55679/debug/pipelinez) |\n\n<sub>Data: [iNaturalist](https://www.inaturalist.org) (observations, CC BY-NC per record) · [Wikimedia](https://wikimedia.org/api/rest_v1/) page views (CC0) · [Mastodon](https://mastodon.social) public tag statistics · [GBIF](https://www.gbif.org) (CC0/CC BY). **Never eat a mushroom based on a dashboard.**</sub>\n",
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        }
+      }
+    }
+  ]
+}

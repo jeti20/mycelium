@@ -1,0 +1,134 @@
+# SLI building blocks - the hand-written half of the SLO pipeline.
+#
+# Sloth (slos/*.yml -> rules/slo/*.yml) turns these series into error ratios,
+# burn rates, budgets and multi-window multi-burn-rate alerts. Anything that is
+# not a plain counter or event stream gets prepared here first:
+#
+#   provider:latency_threshold:ms        configuration as data (one per provider)
+#   provider:probe_latency_good:bool     1 = last probe answered 2xx within threshold
+#   provider:freshness_good:bool         1 = data is fresh right now (time-based SLI)
+#   platform:forest_data_fresh:bool      1 = the dashboards show current data
+#
+# Provider freshness SLIs are also silent while our own collection path is
+# down: that is our outage, not stale upstream data.
+#
+# Freshness SLIs are silent for the first 20 min after Prometheus starts: a
+# cold start has no data yet by definition (Wikimedia and GBIF are polled every 10 min),
+# and "no data" would otherwise count as stale and page on every restart.
+
+groups:
+
+  # One group on purpose: rules in a group are evaluated in order, so the
+  # constants below exist before the building blocks that use them - even on
+  # the very first evaluation after a restart (no false "bad" samples).
+  - name: sli-building-blocks
+    interval: 30s
+    rules:
+      # Latency thresholds per provider, chosen from observed p95 plus headroom
+      # (docs/slo-decisions.md). Change here; the SLO follows automatically.
+      - record: provider:latency_threshold:ms
+        expr: vector(1500)
+        labels:
+          provider: inaturalist
+      - record: provider:latency_threshold:ms
+        expr: vector(1000)
+        labels:
+          provider: wikimedia
+      - record: provider:latency_threshold:ms
+        expr: vector(1000)
+        labels:
+          provider: mastodon
+      - record: provider:latency_threshold:ms
+        expr: vector(1000)
+        labels:
+          provider: gbif
+
+      # Wikimedia publishes daily page views with a delay. The newest data
+      # point is "fresh" when it is not older than the day before yesterday.
+      # Its timestamps look like 2026101000 (YYYYMMDDHH), so the cut-off is
+      # built with PromQL's date functions in the same format.
+      - record: wiki:freshness_cutoff:yyyymmdd00
+        expr: |
+          year(vector(time() - 2 * 86400)) * 1000000
+          + month(vector(time() - 2 * 86400)) * 10000
+          + day_of_month(vector(time() - 2 * 86400)) * 100
+
+      # Seconds since Prometheus (re)started - the warm-up gate for freshness.
+      - record: platform:prometheus_uptime:seconds
+        expr: time() - max(process_start_time_seconds{job="prometheus"})
+
+      # 1 while our own collection path (collector + json-exporter) is up.
+      # Provider freshness is observed *through* this path; when it is broken
+      # we are measuring ourselves, not the provider (found in a game day).
+      - record: platform:collection_path_up:bool
+        expr: min(up{job=~"otel-collector|json-exporter"}) or on () vector(0)
+
+      # httpcheck.success and httpcheck.duration come from the same probe with
+      # the same timestamp, one series each per provider (see the collector's
+      # transform/probes), so this is a clean per-probe "fast AND successful".
+      - record: provider:probe_latency_good:bool
+        expr: |
+          (
+            max by (provider) (httpcheck_duration_milliseconds)
+            < bool on (provider)
+            max by (provider) (provider:latency_threshold:ms)
+          )
+          * on (provider)
+          max by (provider) (httpcheck_success)
+
+      # iNaturalist: observation ids only grow. If the newest fungus worldwide
+      # has not changed for 20 min (5 polls), the API is serving frozen data.
+      # "or vector(0)": no data at all is not fresh data.
+      - record: provider:freshness_good:bool
+        labels:
+          provider: inaturalist
+        expr: |
+          (
+            (max(changes(inat_latest_observation_id{scope="fungi-world"}[20m])) > bool 0)
+            or on () vector(0)
+          )
+          and on () (platform:prometheus_uptime:seconds > 1200)
+          and on () (platform:collection_path_up:bool == 1)
+
+      # Wikimedia: the newest published day (across all articles) must be at
+      # least the cut-off day. max(), not min(): the API omits days with zero
+      # views, so a quiet article's "latest day" lags behind although the
+      # dataset is fresh. last_over_time bridges the 10-min poll interval.
+      - record: provider:freshness_good:bool
+        labels:
+          provider: wikimedia
+        expr: |
+          (
+            (
+              max(last_over_time(wiki_pageviews_latest_day[1h]))
+              >= bool on ()
+              wiki:freshness_cutoff:yyyymmdd00
+            )
+            or on () vector(0)
+          )
+          and on () (platform:prometheus_uptime:seconds > 1200)
+          and on () (platform:collection_path_up:bool == 1)
+
+      # Mastodon: history[0] of every tag must be today (00:00 UTC), allowing
+      # 30 min after midnight for the next poll: 86400 + 1800 = 88200 s.
+      - record: provider:freshness_good:bool
+        labels:
+          provider: mastodon
+        expr: |
+          (
+            (max(time() - last_over_time(mastodon_tag_today_start_timestamp_seconds[30m])) < bool 88200)
+            or on () vector(0)
+          )
+          and on () (platform:prometheus_uptime:seconds > 1200)
+          and on () (platform:collection_path_up:bool == 1)
+
+      # The whole chain, end to end: is the newest iNaturalist sample stored in
+      # Prometheus younger than 10 min? The subquery finds the real timestamp
+      # of the newest sample even when it is older than the 5-min lookback.
+      - record: platform:forest_data_fresh:bool
+        expr: |
+          (
+            (time() - max(max_over_time(timestamp(inat_observations{scope="fungi-pl"})[15m:30s])) < bool 600)
+            or on () vector(0)
+          )
+          and on () (platform:prometheus_uptime:seconds > 1200)
