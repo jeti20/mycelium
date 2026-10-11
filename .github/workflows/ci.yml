@@ -32,7 +32,7 @@ jobs:
 
       - name: generated SLO rules are up to date (Sloth drift check)
         run: |
-          docker compose run --rm sloth-generate
+          HOST_UID="$(id -u)" HOST_GID="$(id -g)" docker compose run --rm sloth-generate
           git diff --exit-code -- prometheus/rules/slo || {
             echo "::error::prometheus/rules/slo is out of date - run 'docker compose run --rm sloth-generate' and commit"; exit 1; }
 

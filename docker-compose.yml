@@ -190,6 +190,8 @@ services:
     image: ghcr.io/slok/sloth:v0.16.0
     profiles: [tools]
     command: ["generate", "--input=/slos", "--out=/out", "--default-slo-period=30d"]
+    # The image runs as nonroot; on Linux it must write as the repo owner or the bind mount is read-only for it.
+    user: "${HOST_UID:-0}:${HOST_GID:-0}"
     volumes:
       - ./slos:/slos:ro
       - ./prometheus/rules/slo:/out
