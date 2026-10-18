@@ -38,7 +38,7 @@ services:
     logging: *logging
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.162.0
+    image: otel/opentelemetry-collector-contrib:0.162.0-386
     command: ["--config=/etc/otelcol/config.yaml"]
     # filelog needs to read Docker's log files (owned by root).
     user: "0:0"
@@ -89,7 +89,7 @@ services:
     logging: *logging
 
   mailpit:
-    image: axllent/mailpit:v1.31.5
+    image: axllent/mailpit:v1.31.6
     environment:
       MP_ENABLE_PROMETHEUS: "true"
       MP_MAX_MESSAGES: "5000"
@@ -141,7 +141,7 @@ services:
     logging: *logging
 
   grafana:
-    image: grafana/grafana:13.2.3
+    image: grafana/grafana:13.2.4
     environment:
       GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-admin}
@@ -175,7 +175,7 @@ services:
     logging: *logging
 
   renderer:
-    image: grafana/grafana-image-renderer:v5.12.6
+    image: grafana/grafana-image-renderer:v5.12.7
     environment:
       AUTH_TOKEN: ${GF_RENDERER_TOKEN:-change-me-renderer-token}
     restart: unless-stopped
@@ -246,7 +246,7 @@ services:
       - ./:/work:ro
 
   otelcol-validate:
-    image: otel/opentelemetry-collector-contrib:0.162.0
+    image: otel/opentelemetry-collector-contrib:0.162.0-386
     profiles: [tools]
     command: ["validate", "--config=/etc/otelcol/config.yaml"]
     volumes:
