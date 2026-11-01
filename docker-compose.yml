@@ -38,7 +38,7 @@ services:
     logging: *logging
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.162.0
+    image: otel/opentelemetry-collector-contrib:0.164.0
     command: ["--config=/etc/otelcol/config.yaml"]
     # filelog needs to read Docker's log files (owned by root).
     user: "0:0"
@@ -52,7 +52,7 @@ services:
     logging: *logging
 
   prometheus:
-    image: prom/prometheus:v3.15.0
+    image: prom/prometheus:v3.15.1
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
@@ -74,7 +74,7 @@ services:
     logging: *logging
 
   alertmanager:
-    image: prom/alertmanager:v0.34.1
+    image: prom/alertmanager:v0.34.2
     command:
       - --config.file=/etc/alertmanager/alertmanager.yml
       - --storage.path=/alertmanager
@@ -89,7 +89,7 @@ services:
     logging: *logging
 
   mailpit:
-    image: axllent/mailpit:v1.31.5
+    image: axllent/mailpit:v1.32.0
     environment:
       MP_ENABLE_PROMETHEUS: "true"
       MP_MAX_MESSAGES: "5000"
@@ -105,7 +105,7 @@ services:
     logging: *logging
 
   tempo:
-    image: grafana/tempo:3.1.0
+    image: grafana/tempo:3.1.1
     command: ["-target=all", "-config.file=/etc/tempo/tempo.yaml"]
     user: "0:0"
     volumes:
@@ -115,7 +115,7 @@ services:
     logging: *logging
 
   loki:
-    image: grafana/loki:3.7.8
+    image: grafana/loki:3.7.9
     command: ["-config.file=/etc/loki/loki.yaml"]
     volumes:
       - ./loki/loki.yaml:/etc/loki/loki.yaml:ro
@@ -141,7 +141,7 @@ services:
     logging: *logging
 
   grafana:
-    image: grafana/grafana:13.2.3
+    image: grafana/grafana:13.3.0
     environment:
       GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-admin}
@@ -175,7 +175,7 @@ services:
     logging: *logging
 
   renderer:
-    image: grafana/grafana-image-renderer:v5.12.6
+    image: grafana/grafana-image-renderer:v5.12.10
     environment:
       AUTH_TOKEN: ${GF_RENDERER_TOKEN:-change-me-renderer-token}
     restart: unless-stopped
@@ -204,7 +204,7 @@ services:
       - ./slos:/slos:ro
 
   promtool:
-    image: prom/prometheus:v3.15.0
+    image: prom/prometheus:v3.15.1
     profiles: [tools]
     entrypoint: ["promtool"]
     working_dir: /etc/prometheus
@@ -212,7 +212,7 @@ services:
       - ./prometheus:/etc/prometheus:ro
 
   amtool:
-    image: prom/alertmanager:v0.34.1
+    image: prom/alertmanager:v0.34.2
     profiles: [tools]
     entrypoint: ["amtool"]
     command: ["check-config", "/etc/alertmanager/alertmanager.yml"]
@@ -220,7 +220,7 @@ services:
       - ./alertmanager:/etc/alertmanager:ro
 
   amtool-routes:
-    image: prom/alertmanager:v0.34.1
+    image: prom/alertmanager:v0.34.2
     profiles: [tools]
     entrypoint: ["sh", "-c"]
     command:
@@ -246,14 +246,14 @@ services:
       - ./:/work:ro
 
   otelcol-validate:
-    image: otel/opentelemetry-collector-contrib:0.162.0
+    image: otel/opentelemetry-collector-contrib:0.164.0
     profiles: [tools]
     command: ["validate", "--config=/etc/otelcol/config.yaml"]
     volumes:
       - ./otel-collector:/etc/otelcol:ro
 
   loki-validate:
-    image: grafana/loki:3.7.8
+    image: grafana/loki:3.7.9
     profiles: [tools]
     command: ["-config.file=/etc/loki/loki.yaml", "-verify-config"]
     volumes:
